@@ -6,7 +6,7 @@ import {
   TOKEN_STORAGE_KEY,
   CODE_VERIFIER_KEY,
 } from "./constants";
-import type { TokenResponse, StoredTokens, SpotifyUser, PlaybackState } from "./types";
+import type { TokenResponse, StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack } from "./types";
 
 function generateRandomString(length: number): string {
   const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -185,4 +185,88 @@ export async function pause(accessToken: string): Promise<void> {
     method: "PUT",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+}
+
+export async function searchTracks(
+  accessToken: string,
+  query: string,
+  limit: number = 20
+): Promise<SpotifyTrack[]> {
+  const params = new URLSearchParams({
+    q: query,
+    type: "track",
+    limit: limit.toString(),
+  });
+
+  const response = await fetch(`${SPOTIFY_API_BASE}/search?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Authentication required");
+    }
+    throw new Error(`Search failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.tracks?.items ?? [];
+}
+
+export async function createPlaylist(
+  accessToken: string,
+  userId: string,
+  name: string,
+  description?: string
+): Promise<string> {
+  const response = await fetch(`${SPOTIFY_API_BASE}/users/${userId}/playlists`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name,
+      description: description ?? "Created with Boy App",
+      public: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create playlist: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.id;
+}
+
+export async function addTracksToPlaylist(
+  accessToken: string,
+  playlistId: string,
+  trackUris: string[]
+): Promise<void> {
+  const chunks = chunkArray(trackUris, 100);
+
+  for (const chunk of chunks) {
+    const response = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uris: chunk,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to add tracks: ${response.status}`);
+    }
+  }
+}
+
+function chunkArray<T>(array: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(array.length / size) }, (_, i) =>
+    array.slice(i * size, i * size + size)
+  );
 }

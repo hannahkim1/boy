@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import type { StoredTokens, SpotifyUser, PlaybackState } from "@/lib/types";
+import type { StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack } from "@/lib/types";
 import {
   getStoredTokens,
   clearTokens,
@@ -11,6 +11,9 @@ import {
   getCurrentPlayback,
   play as spotifyPlay,
   pause as spotifyPause,
+  searchTracks,
+  createPlaylist,
+  addTracksToPlaylist,
 } from "@/lib/spotify";
 
 interface SpotifyContextValue {
@@ -22,6 +25,9 @@ interface SpotifyContextValue {
   refreshPlayback: () => Promise<void>;
   play: () => Promise<void>;
   pause: () => Promise<void>;
+  search: (query: string) => Promise<SpotifyTrack[]>;
+  createPlaylistWithTracks: (name: string, tracks: SpotifyTrack[]) => Promise<string>;
+  getValidToken: () => Promise<string | null>;
 }
 
 const SpotifyContext = createContext<SpotifyContextValue | null>(null);
@@ -87,6 +93,29 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     await refreshPlayback();
   }, [getValidToken, refreshPlayback]);
 
+  const search = useCallback(async (query: string) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    return searchTracks(accessToken, query);
+  }, [getValidToken]);
+
+  const createPlaylistWithTracks = useCallback(
+    async (name: string, tracks: SpotifyTrack[]) => {
+      const accessToken = await getValidToken();
+      if (!accessToken || !user) throw new Error("Not authenticated");
+
+      const playlistId = await createPlaylist(accessToken, user.id, name);
+
+      if (tracks.length > 0) {
+        const trackUris = tracks.map((t) => t.uri);
+        await addTracksToPlaylist(accessToken, playlistId, trackUris);
+      }
+
+      return playlistId;
+    },
+    [getValidToken, user]
+  );
+
   useEffect(() => {
     async function init() {
       const storedTokens = getStoredTokens();
@@ -140,6 +169,9 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         refreshPlayback,
         play,
         pause,
+        search,
+        createPlaylistWithTracks,
+        getValidToken,
       }}
     >
       {children}

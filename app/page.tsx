@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/Button";
 import { SpinningDisc } from "@/components/SpinningDisc";
+import { PlaylistCreator } from "@/components/PlaylistCreator";
 import { useSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayback } from "@/hooks/usePlayback";
 import { exchangeCodeForTokens } from "@/lib/spotify";
@@ -67,6 +68,8 @@ function HomeContent() {
           <p className="text-zinc-500 text-sm mt-1">Play something on Spotify</p>
         </div>
       )}
+
+      <PlaylistCreator />
 
       <Button variant="ghost" onClick={logout} className="text-sm">
         Disconnect
