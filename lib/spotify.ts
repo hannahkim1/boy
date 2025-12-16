@@ -186,3 +186,17 @@ export async function pause(accessToken: string): Promise<void> {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
+
+export async function skipToNext(accessToken: string): Promise<void> {
+  await fetch(`${SPOTIFY_API_BASE}/me/player/next`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function skipToPrevious(accessToken: string): Promise<void> {
+  await fetch(`${SPOTIFY_API_BASE}/me/player/previous`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}

@@ -11,6 +11,8 @@ import {
   getCurrentPlayback,
   play as spotifyPlay,
   pause as spotifyPause,
+  skipToNext as spotifySkipNext,
+  skipToPrevious as spotifySkipPrevious,
 } from "@/lib/spotify";
 
 interface SpotifyContextValue {
@@ -22,6 +24,8 @@ interface SpotifyContextValue {
   refreshPlayback: () => Promise<void>;
   play: () => Promise<void>;
   pause: () => Promise<void>;
+  skipNext: () => Promise<void>;
+  skipPrevious: () => Promise<void>;
 }
 
 const SpotifyContext = createContext<SpotifyContextValue | null>(null);
@@ -87,6 +91,20 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     await refreshPlayback();
   }, [getValidToken, refreshPlayback]);
 
+  const skipNext = useCallback(async () => {
+    const accessToken = await getValidToken();
+    if (!accessToken) return;
+    await spotifySkipNext(accessToken);
+    await refreshPlayback();
+  }, [getValidToken, refreshPlayback]);
+
+  const skipPrevious = useCallback(async () => {
+    const accessToken = await getValidToken();
+    if (!accessToken) return;
+    await spotifySkipPrevious(accessToken);
+    await refreshPlayback();
+  }, [getValidToken, refreshPlayback]);
+
   useEffect(() => {
     async function init() {
       const storedTokens = getStoredTokens();
@@ -140,6 +158,8 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         refreshPlayback,
         play,
         pause,
+        skipNext,
+        skipPrevious,
       }}
     >
       {children}

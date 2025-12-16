@@ -4,16 +4,26 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/Button";
-import { SpinningDisc } from "@/components/SpinningDisc";
+import { RecordPlayerScene } from "@/components/RecordPlayerScene";
 import { useSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayback } from "@/hooks/usePlayback";
+import { useSpotify } from "@/context/SpotifyContext";
 import { exchangeCodeForTokens } from "@/lib/spotify";
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, login, logout } = useSpotifyAuth();
-  const { isPlaying, albumArt, trackName, artistName } = usePlayback();
+  const { isPlaying, albumArt, trackName, artistName, progress, duration } = usePlayback();
+  const { play, pause, skipNext, skipPrevious } = useSpotify();
   const [isExchanging, setIsExchanging] = useState(false);
+
+  const handlePlayPause = async () => {
+    if (isPlaying) {
+      await pause();
+    } else {
+      await play();
+    }
+  };
 
   useEffect(() => {
     async function handleCallback() {
@@ -53,24 +63,32 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-8 p-8">
-      <SpinningDisc albumArt={albumArt} isPlaying={isPlaying} size={280} />
+    <div className="relative w-full h-screen overflow-hidden">
+      <RecordPlayerScene
+        albumArt={albumArt}
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPause}
+        onSkipNext={skipNext}
+        onSkipPrevious={skipPrevious}
+        trackName={trackName}
+        artistName={artistName}
+        progress={progress}
+        duration={duration}
+      />
 
-      {trackName ? (
-        <div className="text-center">
-          <h2 className="text-2xl font-semibold text-white">{trackName}</h2>
-          <p className="text-zinc-400 mt-1">{artistName}</p>
-        </div>
-      ) : (
-        <div className="text-center">
-          <p className="text-zinc-400">Nothing playing</p>
-          <p className="text-zinc-500 text-sm mt-1">Play something on Spotify</p>
-        </div>
-      )}
+      {/* Overlay UI */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4">
+        {!trackName && (
+          <div className="text-center bg-black/50 backdrop-blur-sm rounded-lg px-6 py-3">
+            <p className="text-zinc-400">Nothing playing</p>
+            <p className="text-zinc-500 text-sm mt-1">Play something on Spotify</p>
+          </div>
+        )}
 
-      <Button variant="ghost" onClick={logout} className="text-sm">
-        Disconnect
-      </Button>
+        <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm">
+          Disconnect
+        </Button>
+      </div>
     </div>
   );
 }
