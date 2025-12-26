@@ -8,6 +8,8 @@ export const SPOTIFY_SCOPES = [
   "user-read-playback-state",
   "user-read-currently-playing",
   "user-modify-playback-state",
+  "playlist-modify-private",
+  "playlist-modify-public",
 ].join(" ");
 
 export const TOKEN_STORAGE_KEY = "spotify_tokens";

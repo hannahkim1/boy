@@ -10,16 +10,11 @@ interface VinylRecordProps {
   isPlaying: boolean;
 }
 
-function VinylRecord({ albumArt, isPlaying }: VinylRecordProps) {
+function VinylRecordWithTexture({ albumArt, isPlaying }: VinylRecordProps) {
   const discRef = useRef<THREE.Group>(null);
   const materialRef = useRef<THREE.MeshStandardMaterial>(null);
 
-  const texture = useLoader(
-    THREE.TextureLoader,
-    albumArt || "/placeholder.png",
-    undefined,
-    () => {}
-  );
+  const texture = useLoader(THREE.TextureLoader, albumArt!, undefined, () => {});
 
   useEffect(() => {
     if (texture && albumArt) {
@@ -91,6 +86,71 @@ function VinylRecord({ albumArt, isPlaying }: VinylRecordProps) {
         <meshStandardMaterial color="#111111" metalness={0.4} roughness={0.3} />
       </mesh>
     </group>
+  );
+}
+
+function VinylRecordDefault({ isPlaying }: { isPlaying: boolean }) {
+  const discRef = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (discRef.current && isPlaying) {
+      discRef.current.rotation.y += delta * 0.8;
+    }
+  });
+
+  const vinylRadius = 0.14;
+  const labelRadius = 0.065;
+  const thickness = 0.003;
+  const labelY = thickness / 2 + 0.0005;
+
+  return (
+    <group ref={discRef} position={[0, 0.003, 0]}>
+      {/* Main vinyl disc */}
+      <mesh>
+        <cylinderGeometry args={[vinylRadius, vinylRadius, thickness, 64]} />
+        <meshStandardMaterial color="#111111" metalness={0.4} roughness={0.3} />
+      </mesh>
+
+      {/* Vinyl grooves */}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const radius = labelRadius + 0.008 + i * ((vinylRadius - labelRadius - 0.015) / 12);
+        return (
+          <mesh key={i} position={[0, thickness / 2 + 0.0001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[radius - 0.001, radius, 64]} />
+            <meshStandardMaterial color="#0a0a0a" metalness={0.5} roughness={0.4} transparent opacity={0.6} />
+          </mesh>
+        );
+      })}
+
+      {/* Center label - default dark */}
+      <mesh position={[0, labelY, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[labelRadius, 64]} />
+        <meshStandardMaterial color="#1a1a1a" metalness={0.1} roughness={0.7} />
+      </mesh>
+
+      {/* Center spindle hole */}
+      <mesh position={[0, thickness / 2 + 0.0006, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.003, 32]} />
+        <meshStandardMaterial color="#050505" metalness={0.9} roughness={0.1} />
+      </mesh>
+
+      {/* Back side of vinyl */}
+      <mesh position={[0, -thickness / 2 - 0.0001, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[vinylRadius, 64]} />
+        <meshStandardMaterial color="#111111" metalness={0.4} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function VinylRecord({ albumArt, isPlaying }: VinylRecordProps) {
+  if (!albumArt) {
+    return <VinylRecordDefault isPlaying={isPlaying} />;
+  }
+  return (
+    <Suspense fallback={<VinylRecordDefault isPlaying={isPlaying} />}>
+      <VinylRecordWithTexture albumArt={albumArt} isPlaying={isPlaying} />
+    </Suspense>
   );
 }
 
