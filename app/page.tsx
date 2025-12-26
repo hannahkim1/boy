@@ -85,9 +85,14 @@ function HomeContent() {
           </div>
         )}
 
-        <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm">
-          Disconnect
-        </Button>
+        <div className="flex gap-3">
+          <Button onClick={() => window.location.href = "/playlist"} className="bg-black/50 backdrop-blur-sm">
+            Manage Playlists
+          </Button>
+          <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm">
+            Disconnect
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -148,8 +148,8 @@ function VinylRecord({ albumArt, isPlaying }: VinylRecordProps) {
     return <VinylRecordDefault isPlaying={isPlaying} />;
   }
   return (
-    <Suspense fallback={<VinylRecordDefault isPlaying={isPlaying} />}>
-      <VinylRecordWithTexture albumArt={albumArt} isPlaying={isPlaying} />
+    <Suspense key={albumArt} fallback={<VinylRecordDefault isPlaying={isPlaying} />}>
+      <VinylRecordWithTexture key={albumArt} albumArt={albumArt} isPlaying={isPlaying} />
     </Suspense>
   );
 }
@@ -322,8 +322,8 @@ interface ScreenWidgetProps {
   artistName?: string | null;
 }
 
-function ScreenWidgetContent({ albumArt, progress, duration, isPlaying, baseSize = 0.38, trackName, artistName }: ScreenWidgetProps) {
-  const texture = useLoader(THREE.TextureLoader, albumArt || "/placeholder.png", undefined, () => {});
+function ScreenWidgetWithTexture({ albumArt, progress, duration, isPlaying, baseSize = 0.38, trackName, artistName }: ScreenWidgetProps) {
+  const texture = useLoader(THREE.TextureLoader, albumArt!, undefined, () => {});
 
   useEffect(() => {
     if (texture && albumArt) {
@@ -370,11 +370,7 @@ function ScreenWidgetContent({ albumArt, progress, duration, isPlaying, baseSize
       {/* Album art on the left */}
       <mesh position={[-0.035, 0, 0.002]} renderOrder={2}>
         <planeGeometry args={[0.032, 0.032]} />
-        {albumArt ? (
-          <meshBasicMaterial map={texture} />
-        ) : (
-          <meshBasicMaterial color="#151515" />
-        )}
+        <meshBasicMaterial map={texture} />
       </mesh>
 
       {/* Track name text - smaller */}
@@ -453,10 +449,116 @@ function ScreenWidgetContent({ albumArt, progress, duration, isPlaying, baseSize
   );
 }
 
-function ScreenWidget(props: ScreenWidgetProps) {
+function ScreenWidgetDefault({ progress, duration, isPlaying, baseSize = 0.38, trackName, artistName }: Omit<ScreenWidgetProps, 'albumArt'>) {
+  const progressPercent = duration > 0 ? (progress / duration) : 0;
+
+  const formatTime = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const screenWidth = 0.12;
+  const screenHeight = 0.045;
+  const screenX = -baseSize / 2 + screenWidth / 2 + 0.015;
+
+  const displayTrack = trackName ? (trackName.length > 15 ? trackName.slice(0, 14) + '…' : trackName) : 'No Track';
+  const displayArtist = artistName ? (artistName.length > 18 ? artistName.slice(0, 17) + '…' : artistName) : '';
+
   return (
-    <Suspense fallback={null}>
-      <ScreenWidgetContent {...props} />
+    <group position={[screenX, 0.035, baseSize / 2]}>
+      <mesh position={[0, 0, -0.003]}>
+        <boxGeometry args={[screenWidth + 0.01, screenHeight + 0.01, 0.006]} />
+        <meshStandardMaterial color="#050505" metalness={0.3} roughness={0.8} />
+      </mesh>
+
+      <mesh position={[0, 0, 0.001]} renderOrder={1}>
+        <planeGeometry args={[screenWidth, screenHeight]} />
+        <meshBasicMaterial color="#080808" />
+      </mesh>
+
+      <mesh position={[-0.035, 0, 0.002]} renderOrder={2}>
+        <planeGeometry args={[0.032, 0.032]} />
+        <meshBasicMaterial color="#1a1a1a" />
+      </mesh>
+
+      <Text
+        position={[0.02, 0.008, 0.003]}
+        fontSize={0.006}
+        color="#dddddd"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={0.058}
+        renderOrder={3}
+      >
+        {displayTrack}
+      </Text>
+
+      <Text
+        position={[0.02, -0.002, 0.003]}
+        fontSize={0.0045}
+        color="#777777"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={0.058}
+        renderOrder={3}
+      >
+        {displayArtist}
+      </Text>
+
+      <mesh position={[0.02, -0.012, 0.002]} renderOrder={2}>
+        <planeGeometry args={[0.052, 0.003]} />
+        <meshBasicMaterial color="#222222" />
+      </mesh>
+
+      {progressPercent > 0 && (
+        <mesh position={[0.02 - 0.026 + (progressPercent * 0.052) / 2, -0.012, 0.0025]} renderOrder={3}>
+          <planeGeometry args={[Math.max(0.001, progressPercent * 0.052), 0.002]} />
+          <meshBasicMaterial color="#1db954" />
+        </mesh>
+      )}
+
+      <Text
+        position={[0.02, -0.017, 0.003]}
+        fontSize={0.003}
+        color="#555555"
+        anchorX="center"
+        anchorY="middle"
+        renderOrder={3}
+      >
+        {formatTime(progress)} / {formatTime(duration)}
+      </Text>
+
+      {isPlaying && (
+        <mesh position={[0.05, 0.014, 0.002]} renderOrder={2}>
+          <circleGeometry args={[0.0025, 16]} />
+          <meshBasicMaterial color="#1db954" />
+        </mesh>
+      )}
+
+      <mesh position={[0, 0, 0.004]} renderOrder={4}>
+        <planeGeometry args={[screenWidth + 0.004, screenHeight + 0.004]} />
+        <meshPhysicalMaterial
+          color="#ffffff"
+          transparent
+          opacity={0.12}
+          metalness={0.9}
+          roughness={0.1}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function ScreenWidget(props: ScreenWidgetProps) {
+  if (!props.albumArt) {
+    return <ScreenWidgetDefault {...props} />;
+  }
+  return (
+    <Suspense fallback={<ScreenWidgetDefault {...props} />}>
+      <ScreenWidgetWithTexture {...props} />
     </Suspense>
   );
 }

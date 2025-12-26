@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import type { StoredTokens, SpotifyUser, PlaybackState } from "@/lib/types";
+import type { StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack } from "@/lib/types";
 import {
   getStoredTokens,
   clearTokens,
@@ -13,6 +13,13 @@ import {
   pause as spotifyPause,
   skipToNext as spotifySkipNext,
   skipToPrevious as spotifySkipPrevious,
+  searchTracks,
+  createPlaylist,
+  addTracksToPlaylist,
+  playPlaylist,
+  getPlaylist,
+  getUserPlaylists,
+  removeTracksFromPlaylist,
 } from "@/lib/spotify";
 
 interface SpotifyContextValue {
@@ -26,6 +33,14 @@ interface SpotifyContextValue {
   pause: () => Promise<void>;
   skipNext: () => Promise<void>;
   skipPrevious: () => Promise<void>;
+  search: (query: string) => Promise<SpotifyTrack[]>;
+  createPlaylistWithTracks: (name: string, tracks: SpotifyTrack[], message?: string) => Promise<string>;
+  getValidToken: () => Promise<string | null>;
+  playPlaylistById: (playlistId: string) => Promise<void>;
+  getPlaylistById: (playlistId: string) => Promise<any>;
+  getUserPlaylists: () => Promise<any>;
+  removeTracksFromPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
+  addTracksToPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
 }
 
 const SpotifyContext = createContext<SpotifyContextValue | null>(null);
@@ -105,6 +120,67 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     await refreshPlayback();
   }, [getValidToken, refreshPlayback]);
 
+  const search = useCallback(async (query: string) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    return searchTracks(accessToken, query);
+  }, [getValidToken]);
+
+  const createPlaylistWithTracks = useCallback(
+    async (name: string, tracks: SpotifyTrack[], message?: string) => {
+      const accessToken = await getValidToken();
+      if (!accessToken || !user) throw new Error("Not authenticated");
+
+      const playlistId = await createPlaylist(accessToken, user.id, name, message);
+
+      if (tracks.length > 0) {
+        const trackUris = tracks.map((t) => t.uri);
+        await addTracksToPlaylist(accessToken, playlistId, trackUris);
+      }
+
+      return playlistId;
+    },
+    [getValidToken, user]
+  );
+
+  const playPlaylistById = useCallback(async (playlistId: string) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    const playlistUri = `spotify:playlist:${playlistId}`;
+    await playPlaylist(accessToken, playlistUri);
+    await refreshPlayback();
+  }, [getValidToken, refreshPlayback]);
+
+  const getPlaylistById = useCallback(async (playlistId: string) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    return getPlaylist(accessToken, playlistId);
+  }, [getValidToken]);
+
+  const getUserPlaylistsData = useCallback(async () => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    return getUserPlaylists(accessToken);
+  }, [getValidToken]);
+
+  const removeTracksFromPlaylistById = useCallback(
+    async (playlistId: string, trackUris: string[]) => {
+      const accessToken = await getValidToken();
+      if (!accessToken) throw new Error("Not authenticated");
+      await removeTracksFromPlaylist(accessToken, playlistId, trackUris);
+    },
+    [getValidToken]
+  );
+
+  const addTracksToPlaylistById = useCallback(
+    async (playlistId: string, trackUris: string[]) => {
+      const accessToken = await getValidToken();
+      if (!accessToken) throw new Error("Not authenticated");
+      await addTracksToPlaylist(accessToken, playlistId, trackUris);
+    },
+    [getValidToken]
+  );
+
   useEffect(() => {
     async function init() {
       const storedTokens = getStoredTokens();
@@ -160,6 +236,14 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         pause,
         skipNext,
         skipPrevious,
+        search,
+        createPlaylistWithTracks,
+        getValidToken,
+        playPlaylistById,
+        getPlaylistById,
+        getUserPlaylists: getUserPlaylistsData,
+        removeTracksFromPlaylist: removeTracksFromPlaylistById,
+        addTracksToPlaylist: addTracksToPlaylistById,
       }}
     >
       {children}
