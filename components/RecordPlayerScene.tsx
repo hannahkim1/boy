@@ -1,9 +1,24 @@
 "use client";
 
 import { Suspense, useRef, useState, useEffect } from "react";
-import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
 import * as THREE from "three";
+
+// Component to handle WebGL context cleanup on unmount
+function WebGLCleanup() {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    return () => {
+      // Only dispose, don't force context loss as it can cause issues during hot reload
+      gl.dispose();
+    };
+  }, [gl]);
+
+  return null;
+}
+
 
 interface VinylRecordProps {
   albumArt: string | null;
@@ -1024,6 +1039,7 @@ export function RecordPlayerScene({
           });
         }}
       >
+        <WebGLCleanup />
         <color attach="background" args={["#050505"]} />
         <Lighting />
         <Room />

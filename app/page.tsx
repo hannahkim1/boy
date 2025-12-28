@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/Button";
-import { RecordPlayerScene } from "@/components/RecordPlayerScene";
+import { RecordPlayerSceneClient } from "@/components/RecordPlayerSceneClient";
 import { useSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayback } from "@/hooks/usePlayback";
 import { useSpotify } from "@/context/SpotifyContext";
@@ -64,7 +64,7 @@ function HomeContent() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
-      <RecordPlayerScene
+      <RecordPlayerSceneClient
         albumArt={albumArt}
         isPlaying={isPlaying}
         onPlayPause={handlePlayPause}

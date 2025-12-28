@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { RecordPlayerScene } from "@/components/RecordPlayerScene";
+import { RecordPlayerSceneClient } from "@/components/RecordPlayerSceneClient";
 import { Button } from "@/components/Button";
 import { useSpotify } from "@/context/SpotifyContext";
 import { useSpotifyAuth } from "@/hooks/useSpotifyAuth";
@@ -109,7 +109,7 @@ export default function ReceiverPage() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#0a0a0a]">
-      <RecordPlayerScene
+      <RecordPlayerSceneClient
         albumArt={hasStartedPlayback ? albumArt : null}
         isPlaying={isPlaying}
         onPlayPause={handlePlayPause}
