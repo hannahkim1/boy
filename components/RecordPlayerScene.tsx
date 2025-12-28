@@ -10,16 +10,11 @@ interface VinylRecordProps {
   isPlaying: boolean;
 }
 
-function VinylRecord({ albumArt, isPlaying }: VinylRecordProps) {
+function VinylRecordWithTexture({ albumArt, isPlaying }: VinylRecordProps) {
   const discRef = useRef<THREE.Group>(null);
   const materialRef = useRef<THREE.MeshStandardMaterial>(null);
 
-  const texture = useLoader(
-    THREE.TextureLoader,
-    albumArt || "/placeholder.png",
-    undefined,
-    () => {}
-  );
+  const texture = useLoader(THREE.TextureLoader, albumArt!, undefined, () => {});
 
   useEffect(() => {
     if (texture && albumArt) {
@@ -91,6 +86,71 @@ function VinylRecord({ albumArt, isPlaying }: VinylRecordProps) {
         <meshStandardMaterial color="#111111" metalness={0.4} roughness={0.3} />
       </mesh>
     </group>
+  );
+}
+
+function VinylRecordDefault({ isPlaying }: { isPlaying: boolean }) {
+  const discRef = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (discRef.current && isPlaying) {
+      discRef.current.rotation.y += delta * 0.8;
+    }
+  });
+
+  const vinylRadius = 0.14;
+  const labelRadius = 0.065;
+  const thickness = 0.003;
+  const labelY = thickness / 2 + 0.0005;
+
+  return (
+    <group ref={discRef} position={[0, 0.003, 0]}>
+      {/* Main vinyl disc */}
+      <mesh>
+        <cylinderGeometry args={[vinylRadius, vinylRadius, thickness, 64]} />
+        <meshStandardMaterial color="#111111" metalness={0.4} roughness={0.3} />
+      </mesh>
+
+      {/* Vinyl grooves */}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const radius = labelRadius + 0.008 + i * ((vinylRadius - labelRadius - 0.015) / 12);
+        return (
+          <mesh key={i} position={[0, thickness / 2 + 0.0001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[radius - 0.001, radius, 64]} />
+            <meshStandardMaterial color="#0a0a0a" metalness={0.5} roughness={0.4} transparent opacity={0.6} />
+          </mesh>
+        );
+      })}
+
+      {/* Center label - default dark */}
+      <mesh position={[0, labelY, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[labelRadius, 64]} />
+        <meshStandardMaterial color="#1a1a1a" metalness={0.1} roughness={0.7} />
+      </mesh>
+
+      {/* Center spindle hole */}
+      <mesh position={[0, thickness / 2 + 0.0006, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.003, 32]} />
+        <meshStandardMaterial color="#050505" metalness={0.9} roughness={0.1} />
+      </mesh>
+
+      {/* Back side of vinyl */}
+      <mesh position={[0, -thickness / 2 - 0.0001, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[vinylRadius, 64]} />
+        <meshStandardMaterial color="#111111" metalness={0.4} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function VinylRecord({ albumArt, isPlaying }: VinylRecordProps) {
+  if (!albumArt) {
+    return <VinylRecordDefault isPlaying={isPlaying} />;
+  }
+  return (
+    <Suspense key={albumArt} fallback={<VinylRecordDefault isPlaying={isPlaying} />}>
+      <VinylRecordWithTexture key={albumArt} albumArt={albumArt} isPlaying={isPlaying} />
+    </Suspense>
   );
 }
 
@@ -401,6 +461,109 @@ function ScreenWidgetBase({ texture, progress, duration, isPlaying, baseSize = 0
       )}
 
       {/* Glass cover - flush with front, creates embedded look */}
+      <mesh position={[0, 0, 0.004]} renderOrder={4}>
+        <planeGeometry args={[screenWidth + 0.004, screenHeight + 0.004]} />
+        <meshPhysicalMaterial
+          color="#ffffff"
+          transparent
+          opacity={0.12}
+          metalness={0.9}
+          roughness={0.1}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function ScreenWidgetDefault({ progress, duration, isPlaying, baseSize = 0.38, trackName, artistName }: Omit<ScreenWidgetProps, 'albumArt'>) {
+  const progressPercent = duration > 0 ? (progress / duration) : 0;
+
+  const formatTime = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const screenWidth = 0.12;
+  const screenHeight = 0.045;
+  const screenX = -baseSize / 2 + screenWidth / 2 + 0.015;
+
+  const displayTrack = trackName ? (trackName.length > 15 ? trackName.slice(0, 14) + '…' : trackName) : 'No Track';
+  const displayArtist = artistName ? (artistName.length > 18 ? artistName.slice(0, 17) + '…' : artistName) : '';
+
+  return (
+    <group position={[screenX, 0.035, baseSize / 2]}>
+      <mesh position={[0, 0, -0.003]}>
+        <boxGeometry args={[screenWidth + 0.01, screenHeight + 0.01, 0.006]} />
+        <meshStandardMaterial color="#050505" metalness={0.3} roughness={0.8} />
+      </mesh>
+
+      <mesh position={[0, 0, 0.001]} renderOrder={1}>
+        <planeGeometry args={[screenWidth, screenHeight]} />
+        <meshBasicMaterial color="#080808" />
+      </mesh>
+
+      <mesh position={[-0.035, 0, 0.002]} renderOrder={2}>
+        <planeGeometry args={[0.032, 0.032]} />
+        <meshBasicMaterial color="#1a1a1a" />
+      </mesh>
+
+      <Text
+        position={[0.02, 0.008, 0.003]}
+        fontSize={0.006}
+        color="#dddddd"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={0.058}
+        renderOrder={3}
+      >
+        {displayTrack}
+      </Text>
+
+      <Text
+        position={[0.02, -0.002, 0.003]}
+        fontSize={0.0045}
+        color="#777777"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={0.058}
+        renderOrder={3}
+      >
+        {displayArtist}
+      </Text>
+
+      <mesh position={[0.02, -0.012, 0.002]} renderOrder={2}>
+        <planeGeometry args={[0.052, 0.003]} />
+        <meshBasicMaterial color="#222222" />
+      </mesh>
+
+      {progressPercent > 0 && (
+        <mesh position={[0.02 - 0.026 + (progressPercent * 0.052) / 2, -0.012, 0.0025]} renderOrder={3}>
+          <planeGeometry args={[Math.max(0.001, progressPercent * 0.052), 0.002]} />
+          <meshBasicMaterial color="#1db954" />
+        </mesh>
+      )}
+
+      <Text
+        position={[0.02, -0.017, 0.003]}
+        fontSize={0.003}
+        color="#555555"
+        anchorX="center"
+        anchorY="middle"
+        renderOrder={3}
+      >
+        {formatTime(progress)} / {formatTime(duration)}
+      </Text>
+
+      {isPlaying && (
+        <mesh position={[0.05, 0.014, 0.002]} renderOrder={2}>
+          <circleGeometry args={[0.0025, 16]} />
+          <meshBasicMaterial color="#1db954" />
+        </mesh>
+      )}
+
       <mesh position={[0, 0, 0.004]} renderOrder={4}>
         <planeGeometry args={[screenWidth + 0.004, screenHeight + 0.004]} />
         <meshPhysicalMaterial

@@ -6,7 +6,7 @@ import {
   TOKEN_STORAGE_KEY,
   CODE_VERIFIER_KEY,
 } from "./constants";
-import type { TokenResponse, StoredTokens, SpotifyUser, PlaybackState } from "./types";
+import type { TokenResponse, StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack } from "./types";
 
 function generateRandomString(length: number): string {
   const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -199,4 +199,176 @@ export async function skipToPrevious(accessToken: string): Promise<void> {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+}
+
+export async function searchTracks(
+  accessToken: string,
+  query: string,
+  limit: number = 20
+): Promise<SpotifyTrack[]> {
+  const params = new URLSearchParams({
+    q: query,
+    type: "track",
+    limit: limit.toString(),
+  });
+
+  const response = await fetch(`${SPOTIFY_API_BASE}/search?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Authentication required");
+    }
+    throw new Error(`Search failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.tracks?.items ?? [];
+}
+
+export async function createPlaylist(
+  accessToken: string,
+  userId: string,
+  name: string,
+  description?: string
+): Promise<string> {
+  const response = await fetch(`${SPOTIFY_API_BASE}/users/${userId}/playlists`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name,
+      description: description ?? "Created with Boy App",
+      public: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create playlist: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.id;
+}
+
+export async function addTracksToPlaylist(
+  accessToken: string,
+  playlistId: string,
+  trackUris: string[]
+): Promise<void> {
+  const chunks = chunkArray(trackUris, 100);
+
+  for (const chunk of chunks) {
+    const response = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uris: chunk,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to add tracks: ${response.status}`);
+    }
+  }
+}
+
+function chunkArray<T>(array: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(array.length / size) }, (_, i) =>
+    array.slice(i * size, i * size + size)
+  );
+}
+
+export async function playPlaylist(
+  accessToken: string,
+  playlistUri: string,
+  deviceId?: string
+): Promise<void> {
+  const body: any = {
+    context_uri: playlistUri,
+  };
+
+  if (deviceId) {
+    body.device_id = deviceId;
+  }
+
+  const url = deviceId
+    ? `${SPOTIFY_API_BASE}/me/player/play?device_id=${deviceId}`
+    : `${SPOTIFY_API_BASE}/me/player/play`;
+
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to play playlist: ${response.status}`);
+  }
+}
+
+export async function getPlaylist(
+  accessToken: string,
+  playlistId: string
+): Promise<any> {
+  const response = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlistId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get playlist: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getUserPlaylists(
+  accessToken: string,
+  limit: number = 50
+): Promise<any> {
+  const response = await fetch(
+    `${SPOTIFY_API_BASE}/me/playlists?limit=${limit}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get playlists: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function removeTracksFromPlaylist(
+  accessToken: string,
+  playlistId: string,
+  trackUris: string[]
+): Promise<void> {
+  const response = await fetch(
+    `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        tracks: trackUris.map((uri) => ({ uri })),
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to remove tracks: ${response.status}`);
+  }
 }
