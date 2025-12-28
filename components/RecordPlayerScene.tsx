@@ -322,15 +322,38 @@ interface ScreenWidgetProps {
   artistName?: string | null;
 }
 
-function ScreenWidgetWithTexture({ albumArt, progress, duration, isPlaying, baseSize = 0.38, trackName, artistName }: ScreenWidgetProps) {
-  const texture = useLoader(THREE.TextureLoader, albumArt!, undefined, () => {});
+function ScreenWidgetWithArt({ albumArt, progress, duration, isPlaying, baseSize = 0.38, trackName, artistName }: ScreenWidgetProps & { albumArt: string }) {
+  const texture = useLoader(THREE.TextureLoader, albumArt, undefined, () => {});
 
   useEffect(() => {
-    if (texture && albumArt) {
+    if (texture) {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.needsUpdate = true;
     }
-  }, [texture, albumArt]);
+  }, [texture]);
+
+  return (
+    <ScreenWidgetBase
+      texture={texture}
+      progress={progress}
+      duration={duration}
+      isPlaying={isPlaying}
+      baseSize={baseSize}
+      trackName={trackName}
+      artistName={artistName}
+    />
+  );
+}
+
+function ScreenWidgetBase({ texture, progress, duration, isPlaying, baseSize = 0.38, trackName, artistName }: {
+  texture?: THREE.Texture | null;
+  progress: number;
+  duration: number;
+  isPlaying: boolean;
+  baseSize?: number;
+  trackName?: string | null;
+  artistName?: string | null;
+}) {
 
   const progressPercent = duration > 0 ? (progress / duration) : 0;
 
@@ -370,7 +393,11 @@ function ScreenWidgetWithTexture({ albumArt, progress, duration, isPlaying, base
       {/* Album art on the left */}
       <mesh position={[-0.035, 0, 0.002]} renderOrder={2}>
         <planeGeometry args={[0.032, 0.032]} />
-        <meshBasicMaterial map={texture} />
+        {texture ? (
+          <meshBasicMaterial map={texture} />
+        ) : (
+          <meshBasicMaterial color="#151515" />
+        )}
       </mesh>
 
       {/* Track name text - smaller */}
@@ -553,14 +580,14 @@ function ScreenWidgetDefault({ progress, duration, isPlaying, baseSize = 0.38, t
 }
 
 function ScreenWidget(props: ScreenWidgetProps) {
-  if (!props.albumArt) {
-    return <ScreenWidgetDefault {...props} />;
+  if (props.albumArt) {
+    return (
+      <Suspense fallback={<ScreenWidgetBase {...props} texture={null} />}>
+        <ScreenWidgetWithArt {...props} albumArt={props.albumArt} />
+      </Suspense>
+    );
   }
-  return (
-    <Suspense fallback={<ScreenWidgetDefault {...props} />}>
-      <ScreenWidgetWithTexture {...props} />
-    </Suspense>
-  );
+  return <ScreenWidgetBase {...props} texture={null} />;
 }
 
 // Glass lid for the turntable
