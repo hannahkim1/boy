@@ -7,14 +7,16 @@ import { Button } from "@/components/Button";
 import { RecordPlayerSceneClient } from "@/components/RecordPlayerSceneClient";
 import { useSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayback } from "@/hooks/usePlayback";
+import { useSavedTrack } from "@/hooks/useSavedTrack";
 import { useSpotify } from "@/context/SpotifyContext";
 import { exchangeCodeForTokens } from "@/lib/spotify";
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, login, logout } = useSpotifyAuth();
-  const { isPlaying, albumArt, trackName, artistName, progress, duration } = usePlayback();
+  const { isPlaying, albumArt, trackName, artistName, progress, duration, track } = usePlayback();
   const { play, pause, skipNext, skipPrevious } = useSpotify();
+  const { isSaved, toggleSave } = useSavedTrack(track?.id);
   const [isExchanging, setIsExchanging] = useState(false);
 
   const handlePlayPause = async () => {
@@ -74,6 +76,8 @@ function HomeContent() {
         artistName={artistName}
         progress={progress}
         duration={duration}
+        onLikeTrack={toggleSave}
+        isLiked={isSaved}
       />
 
       {/* Overlay UI */}
@@ -85,14 +89,9 @@ function HomeContent() {
           </div>
         )}
 
-        <div className="flex gap-3">
-          <Button onClick={() => window.location.href = "/playlist"} className="bg-black/50 backdrop-blur-sm">
-            Manage Playlists
-          </Button>
-          <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm">
-            Disconnect
-          </Button>
-        </div>
+        <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm">
+          Disconnect
+        </Button>
       </div>
     </div>
   );

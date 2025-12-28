@@ -1,6 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useSpotify } from "@/context/SpotifyContext";
+import type { SpotifyTrack } from "@/lib/types";
 
 interface RecordPlayerSceneProps {
   albumArt: string | null;
@@ -12,6 +15,15 @@ interface RecordPlayerSceneProps {
   artistName?: string | null;
   progress?: number;
   duration?: number;
+  onLikeTrack?: () => Promise<void>;
+  isLiked?: boolean;
+  isReceiverMode?: boolean;
+  receiverPlaylistName?: string | null;
+  receiverPlaylistTracks?: SpotifyTrack[];
+  receiverPlaylistId?: string | null;
+  receiverPlaylistImage?: string | null;
+  receiverPlaylistDescription?: string | null;
+  isCurrentTrackInPlaylist?: boolean;
 }
 
 const RecordPlayerSceneInner = dynamic(
@@ -27,5 +39,23 @@ const RecordPlayerSceneInner = dynamic(
 );
 
 export function RecordPlayerSceneClient(props: RecordPlayerSceneProps) {
-  return <RecordPlayerSceneInner {...props} />;
+  const router = useRouter();
+  const { search, createPlaylistWithTracks, getUserPlaylists, playPlaylistById, getPlaylistTracks, playTrackInPlaylist } = useSpotify();
+
+  const handleNavigate = (path: string) => {
+    router.push(path);
+  };
+
+  return (
+    <RecordPlayerSceneInner
+      {...props}
+      onNavigate={handleNavigate}
+      searchTracks={search}
+      createPlaylist={createPlaylistWithTracks}
+      getPlaylists={getUserPlaylists}
+      playPlaylistById={playPlaylistById}
+      getPlaylistTracks={getPlaylistTracks}
+      playTrackInPlaylist={playTrackInPlaylist}
+    />
+  );
 }
