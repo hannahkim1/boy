@@ -2108,55 +2108,6 @@ export function RecordPlayerScene({
 					<BakedScene />
 				</Suspense>
 
-				{/* Interactive overlays — album art, playback controls, monitor UI */}
-				<group position={[0.25, 0, 0.05]} rotation={[0, -0.35, 0]}>
-					<Turntable
-						isPlaying={displayPlaying}
-						onPlayPause={handlePlayPause}
-						onSkipNext={onSkipNext}
-						onSkipPrevious={onSkipPrevious}
-						albumArt={albumArt}
-						progress={progress}
-						duration={duration}
-						trackName={trackName}
-						artistName={artistName}
-					/>
-					<group position={[0, 0.084, 0.03]}>
-						<VinylRecordWithFallback
-							albumArt={albumArt}
-							isPlaying={displayPlaying}
-						/>
-					</group>
-				</group>
-				<Monitor
-					onClick={handleMonitorClick}
-					isHovered={monitorHovered}
-					onHover={setMonitorHovered}
-					isFocused={monitorFocused}
-					onNavigate={onNavigate || (() => {})}
-					searchTracks={searchTracks || (async () => [])}
-					createPlaylist={createPlaylist || (async () => "")}
-					getPlaylists={getPlaylists || (async () => ({ items: [] }))}
-					playPlaylistById={playPlaylistById || (async () => {})}
-					onPlaylistSelect={(_id, name) => setCurrentPlaylistName(name)}
-					getPlaylistTracks={getPlaylistTracks || (async () => [])}
-					playTrackInPlaylist={playTrackInPlaylist || (async () => {})}
-					currentTrackName={trackName}
-					currentArtistName={artistName}
-					currentAlbumArt={albumArt}
-					isPlaying={displayPlaying}
-					onPlayPause={onPlayPause}
-					onSkipNext={onSkipNext}
-					onSkipPrevious={onSkipPrevious}
-					onLikeTrack={onLikeTrack}
-					isLiked={isLiked}
-					isReceiverMode={isReceiverMode}
-					receiverPlaylistName={receiverPlaylistName}
-					receiverPlaylistTracks={receiverPlaylistTracks}
-					receiverPlaylistId={receiverPlaylistId}
-					receiverPlaylistImage={receiverPlaylistImage}
-					isCurrentTrackInPlaylist={isCurrentTrackInPlaylist}
-				/>
 
 				{/* Post-it note for playlist description in receiver mode - outside main group for proper rendering */}
 				{isReceiverMode && receiverPlaylistDescription && (
