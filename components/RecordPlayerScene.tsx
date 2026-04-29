@@ -1737,20 +1737,18 @@ interface CameraControllerProps {
 	mousePosition: { x: number; y: number };
 }
 
-// Default camera position facing the desk straight on - centered on the whole desk
-const CAMERA_DEFAULT = new THREE.Vector3(0, 0.35, 1.0); // Pushed back from table
-const TARGET_DEFAULT = new THREE.Vector3(0, 0.12, 0); // Slightly higher to look up more
+// Default camera matches the Blender scene camera (exported via glTF Y-up conversion)
+const CAMERA_DEFAULT = new THREE.Vector3(0.535, 7.161, 18.605);
+const TARGET_DEFAULT = new THREE.Vector3(0.535, 6.004, 13.741);
 
-// Camera position when focused on monitor - perfectly flush with screen
-// Monitor screen center is at approx y = 0.004 + 0.05 + 0.008 + 0.15 + 0.008 = 0.22
-// Camera positioned directly in front of screen along its normal vector
-const CAMERA_MONITOR = new THREE.Vector3(-0.18, 0.22, 0.35);
-const TARGET_MONITOR = new THREE.Vector3(-0.28, 0.22, -0.07);
+// Camera focus on the laptop screen — positioned ~1u in front along its normal
+const CAMERA_MONITOR = new THREE.Vector3(0.655, 2.31, -2.58);
+const TARGET_MONITOR = new THREE.Vector3(0.655, 2.619, -3.527);
 
 // How much the camera look-at point moves based on mouse position
-const MOUSE_LOOK_X = 0.12; // Left-right look range on desk
-const MOUSE_LOOK_Y = 0.05; // Forward-back look range on desk
-const MOUSE_LERP_SPEED = 0.008; // Much slower camera follow
+const MOUSE_LOOK_X = 0.6;
+const MOUSE_LOOK_Y = 0.3;
+const MOUSE_LERP_SPEED = 0.008;
 
 function CameraController({
 	monitorFocused,
@@ -2079,7 +2077,7 @@ export function RecordPlayerScene({
 		<div className="w-full h-screen relative">
 			<Canvas
 				shadows={false}
-				camera={{ position: [-0.15, 0.32, 0.75], fov: 45 }}
+				camera={{ position: [0.535, 7.161, 18.605], fov: 40 }}
 				gl={{
 					antialias: true,
 					toneMapping: THREE.ACESFilmicToneMapping,
@@ -2105,7 +2103,22 @@ export function RecordPlayerScene({
 
 				{/* Blender scene — static environment, furniture, decorations */}
 				<Suspense fallback={null}>
-					<BakedScene />
+					<BakedScene
+						interactiveMeshes={[
+							"Laptop_Screen",
+							"Turntable_Platter",
+							"Vinyl_Record",
+							"Spindle",
+							"Record_Label",
+						]}
+						onMeshClick={(name) => {
+							if (name === "Laptop_Screen") {
+								handleMonitorClick();
+							} else {
+								handlePlayPause();
+							}
+						}}
+					/>
 				</Suspense>
 
 
@@ -2124,6 +2137,46 @@ export function RecordPlayerScene({
 					mousePosition={mousePosition}
 				/>
 			</Canvas>
+
+			{/* Laptop screen UI overlay — appears when laptop is clicked */}
+			{monitorFocused && (
+				<div className="absolute inset-0 z-30 flex flex-col bg-black/70 backdrop-blur-sm">
+					<button
+						type="button"
+						onClick={handleMonitorClose}
+						className="absolute top-4 right-4 z-10 bg-black/60 hover:bg-black/80 text-white text-xs border border-white/20 rounded-md px-3 py-2 cursor-pointer"
+					>
+						Close (esc)
+					</button>
+					<div className="flex-1 overflow-auto p-6">
+						<MonitorScreenContent
+							onNavigate={onNavigate || (() => {})}
+							searchTracks={searchTracks || (async () => [])}
+							createPlaylist={createPlaylist || (async () => "")}
+							getPlaylists={getPlaylists || (async () => ({ items: [] }))}
+							playPlaylistById={playPlaylistById || (async () => {})}
+							onPlaylistSelect={(_id, name) => setCurrentPlaylistName(name)}
+							getPlaylistTracks={getPlaylistTracks || (async () => [])}
+							playTrackInPlaylist={playTrackInPlaylist || (async () => {})}
+							currentTrackName={trackName}
+							currentArtistName={artistName}
+							currentAlbumArt={albumArt}
+							isPlaying={displayPlaying}
+							onPlayPause={onPlayPause}
+							onSkipNext={onSkipNext}
+							onSkipPrevious={onSkipPrevious}
+							onLikeTrack={onLikeTrack}
+							isLiked={isLiked}
+							isReceiverMode={isReceiverMode}
+							receiverPlaylistName={receiverPlaylistName}
+							receiverPlaylistTracks={receiverPlaylistTracks}
+							receiverPlaylistId={receiverPlaylistId}
+							receiverPlaylistImage={receiverPlaylistImage}
+							isCurrentTrackInPlaylist={isCurrentTrackInPlaylist}
+						/>
+					</div>
+				</div>
+			)}
 
 			{/* Now playing indicator */}
 			{!monitorFocused && (trackName || currentPlaylistName) && (
