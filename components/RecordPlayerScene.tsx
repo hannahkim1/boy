@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { Text, Html } from "@react-three/drei";
+import { BakedScene } from "./BakedScene";
 import * as THREE from "three";
 import type { SpotifyTrack } from "@/lib/types";
 import { MonitorScreenContent, type PlaylistDetails } from "./MonitorScreen";
@@ -2086,6 +2087,7 @@ export function RecordPlayerScene({
 					failIfMajorPerformanceCaveat: false,
 				}}
 				onCreated={({ gl }) => {
+					gl.outputColorSpace = THREE.SRGBColorSpace;
 					gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 					const canvas = gl.domElement;
 					canvas.addEventListener("webglcontextlost", (e) => {
@@ -2100,64 +2102,61 @@ export function RecordPlayerScene({
 				<WebGLCleanup />
 				<color attach="background" args={["#050505"]} />
 				<Lighting />
-				<Room />
 
-				<group position={[0, 0, 0]}>
-					<Table />
-					{/* Record player on right side, angled toward center */}
-					<group position={[0.25, 0, 0.05]} rotation={[0, -0.35, 0]}>
-						<Turntable
-							isPlaying={displayPlaying}
-							onPlayPause={handlePlayPause}
-							onSkipNext={onSkipNext}
-							onSkipPrevious={onSkipPrevious}
-							albumArt={albumArt}
-							progress={progress}
-							duration={duration}
-							trackName={trackName}
-							artistName={artistName}
-						/>
-						{/* Vinyl record on platter - moved forward to match platter */}
-						<group position={[0, 0.084, 0.03]}>
-							<VinylRecordWithFallback
-								albumArt={albumArt}
-								isPlaying={displayPlaying}
-							/>
-						</group>
-					</group>
-					{/* Desktop setup on the left side of the desk */}
-					<Monitor
-						onClick={handleMonitorClick}
-						isHovered={monitorHovered}
-						onHover={setMonitorHovered}
-						isFocused={monitorFocused}
-						onNavigate={onNavigate || (() => {})}
-						searchTracks={searchTracks || (async () => [])}
-						createPlaylist={createPlaylist || (async () => "")}
-						getPlaylists={getPlaylists || (async () => ({ items: [] }))}
-						playPlaylistById={playPlaylistById || (async () => {})}
-						onPlaylistSelect={(_id, name) => setCurrentPlaylistName(name)}
-						getPlaylistTracks={getPlaylistTracks || (async () => [])}
-						playTrackInPlaylist={playTrackInPlaylist || (async () => {})}
-						currentTrackName={trackName}
-						currentArtistName={artistName}
-						currentAlbumArt={albumArt}
+				{/* Blender scene — static environment, furniture, decorations */}
+				<Suspense fallback={null}>
+					<BakedScene />
+				</Suspense>
+
+				{/* Interactive overlays — album art, playback controls, monitor UI */}
+				<group position={[0.25, 0, 0.05]} rotation={[0, -0.35, 0]}>
+					<Turntable
 						isPlaying={displayPlaying}
-						onPlayPause={onPlayPause}
+						onPlayPause={handlePlayPause}
 						onSkipNext={onSkipNext}
 						onSkipPrevious={onSkipPrevious}
-						onLikeTrack={onLikeTrack}
-						isLiked={isLiked}
-						isReceiverMode={isReceiverMode}
-						receiverPlaylistName={receiverPlaylistName}
-						receiverPlaylistTracks={receiverPlaylistTracks}
-						receiverPlaylistId={receiverPlaylistId}
-						receiverPlaylistImage={receiverPlaylistImage}
-						isCurrentTrackInPlaylist={isCurrentTrackInPlaylist}
+						albumArt={albumArt}
+						progress={progress}
+						duration={duration}
+						trackName={trackName}
+						artistName={artistName}
 					/>
-					<Keyboard />
-					<Mouse />
+					<group position={[0, 0.084, 0.03]}>
+						<VinylRecordWithFallback
+							albumArt={albumArt}
+							isPlaying={displayPlaying}
+						/>
+					</group>
 				</group>
+				<Monitor
+					onClick={handleMonitorClick}
+					isHovered={monitorHovered}
+					onHover={setMonitorHovered}
+					isFocused={monitorFocused}
+					onNavigate={onNavigate || (() => {})}
+					searchTracks={searchTracks || (async () => [])}
+					createPlaylist={createPlaylist || (async () => "")}
+					getPlaylists={getPlaylists || (async () => ({ items: [] }))}
+					playPlaylistById={playPlaylistById || (async () => {})}
+					onPlaylistSelect={(_id, name) => setCurrentPlaylistName(name)}
+					getPlaylistTracks={getPlaylistTracks || (async () => [])}
+					playTrackInPlaylist={playTrackInPlaylist || (async () => {})}
+					currentTrackName={trackName}
+					currentArtistName={artistName}
+					currentAlbumArt={albumArt}
+					isPlaying={displayPlaying}
+					onPlayPause={onPlayPause}
+					onSkipNext={onSkipNext}
+					onSkipPrevious={onSkipPrevious}
+					onLikeTrack={onLikeTrack}
+					isLiked={isLiked}
+					isReceiverMode={isReceiverMode}
+					receiverPlaylistName={receiverPlaylistName}
+					receiverPlaylistTracks={receiverPlaylistTracks}
+					receiverPlaylistId={receiverPlaylistId}
+					receiverPlaylistImage={receiverPlaylistImage}
+					isCurrentTrackInPlaylist={isCurrentTrackInPlaylist}
+				/>
 
 				{/* Post-it note for playlist description in receiver mode - outside main group for proper rendering */}
 				{isReceiverMode && receiverPlaylistDescription && (
