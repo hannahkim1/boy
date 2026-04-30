@@ -3,7 +3,7 @@
 import { useSpotify } from "@/context/SpotifyContext";
 
 export function usePlayback() {
-  const { playback, refreshPlayback, play, pause } = useSpotify();
+  const { playback, refreshPlayback, play, pause, topArtistImages, topArtists } = useSpotify();
 
   const isPlaying = playback?.is_playing ?? false;
 
@@ -27,5 +27,7 @@ export function usePlayback() {
     play,
     pause,
     togglePlayback,
+    topArtistImages,
+    topArtists,
   };
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useGLTF } from "@react-three/drei";
-import type { ThreeEvent } from "@react-three/fiber";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 
 const MODEL_PATH = "/recordplayer_current.glb";
@@ -20,12 +20,16 @@ interface BakedSceneProps {
 	interactiveMeshes?: string[];
 	onMeshClick?: (name: string) => void;
 	onMeshHover?: (name: string | null) => void;
+	topArtistImages?: string[];
+	onCoverPositions?: (positions: Map<string, THREE.Vector3>) => void;
 }
 
 export function BakedScene({
 	interactiveMeshes,
 	onMeshClick,
 	onMeshHover,
+	topArtistImages,
+	onCoverPositions,
 }: BakedSceneProps = {}) {
 	const { scene } = useGLTF(MODEL_PATH);
 	const cloned = useMemo(() => scene.clone(true), [scene]);
@@ -78,6 +82,121 @@ export function BakedScene({
 		});
 		console.log("[BakedScene] mesh names:", meshNames);
 	}, [cloned]);
+
+	useEffect(() => {
+		if (!topArtistImages || topArtistImages.length === 0) return;
+
+		const loader = new THREE.TextureLoader();
+		loader.setCrossOrigin("anonymous");
+
+		// Track resources for cleanup
+		const loadedTextures: THREE.Texture[] = [];
+		const createdMaterials: THREE.MeshStandardMaterial[] = [];
+		const clonedGeometries: THREE.BufferGeometry[] = [];
+		const previousMaterials: THREE.Material[] = [];
+
+		cloned.traverse((node) => {
+			if (!(node instanceof THREE.Mesh)) return;
+
+			const match = node.name.match(/^Cover_(\d+)$/);
+			if (!match) return;
+
+			const index = parseInt(match[1], 10) - 1;
+			const imageUrl = topArtistImages[index];
+			if (!imageUrl) return;
+
+			// Regenerate UVs from vertex positions so the full image
+			// maps onto each face (the original UVs are atlas-packed)
+			const oldGeometry = node.geometry;
+			const geometry = oldGeometry.clone();
+			clonedGeometries.push(geometry);
+			const posAttr = geometry.getAttribute("position");
+			const uvAttr = geometry.getAttribute("uv") as THREE.BufferAttribute;
+
+			if (posAttr && uvAttr) {
+				let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+				for (let i = 0; i < posAttr.count; i++) {
+					minX = Math.min(minX, posAttr.getX(i));
+					maxX = Math.max(maxX, posAttr.getX(i));
+					minY = Math.min(minY, posAttr.getY(i));
+					maxY = Math.max(maxY, posAttr.getY(i));
+				}
+				const rangeX = maxX - minX || 1;
+				const rangeY = maxY - minY || 1;
+
+				for (let i = 0; i < uvAttr.count; i++) {
+					uvAttr.setXY(
+						i,
+						1 - (posAttr.getX(i) - minX) / rangeX,
+						1 - (posAttr.getY(i) - minY) / rangeY
+					);
+				}
+				uvAttr.needsUpdate = true;
+			}
+			node.geometry = geometry;
+
+			loader.load(
+				imageUrl,
+				(texture) => {
+					texture.colorSpace = THREE.SRGBColorSpace;
+					texture.flipY = false;
+					texture.needsUpdate = true;
+					loadedTextures.push(texture);
+
+					const originalMat = node.material as THREE.MeshStandardMaterial;
+					previousMaterials.push(originalMat);
+					if (originalMat.isMeshStandardMaterial) {
+						const newMat = originalMat.clone();
+						newMat.map = texture;
+						newMat.color.set(0xffffff);
+						newMat.emissive.set(0x000000);
+						newMat.emissiveIntensity = 0;
+						newMat.metalness = 0;
+						newMat.roughness = 1;
+						newMat.needsUpdate = true;
+						createdMaterials.push(newMat);
+						node.material = newMat;
+					}
+				},
+				undefined,
+				(err) => {
+					console.warn(`Failed to load cover texture for ${node.name}:`, err);
+				}
+			);
+		});
+
+		return () => {
+			loadedTextures.forEach((t) => t.dispose());
+			createdMaterials.forEach((m) => m.dispose());
+			clonedGeometries.forEach((g) => g.dispose());
+		};
+	}, [cloned, topArtistImages]);
+
+	// Report cover world positions after the first frame (when world matrices are valid)
+	const onCoverPositionsRef = useRef(onCoverPositions);
+	onCoverPositionsRef.current = onCoverPositions;
+	const coverPositionsReported = useRef(false);
+
+	useFrame(() => {
+		if (coverPositionsReported.current || !onCoverPositionsRef.current) return;
+		const positions = new Map<string, THREE.Vector3>();
+		cloned.traverse((node) => {
+			if (node.name.match(/^Cover_\d+$/) && (node as THREE.Mesh).isMesh) {
+				const mesh = node as THREE.Mesh;
+				// Use bounding box center in world space — more accurate than
+				// node origin when geometry is offset from the transform.
+				mesh.geometry.computeBoundingBox();
+				const center = new THREE.Vector3();
+				mesh.geometry.boundingBox!.getCenter(center);
+				mesh.localToWorld(center);
+				positions.set(node.name, center);
+			}
+		});
+		if (positions.size > 0) {
+			onCoverPositionsRef.current(positions);
+			coverPositionsReported.current = true;
+		}
+	});
 
 	const isInteractive = (name: string) =>
 		!interactiveMeshes || interactiveMeshes.includes(name);

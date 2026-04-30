@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import type { StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack } from "@/lib/types";
+import type { StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack, TopArtist } from "@/lib/types";
 import {
   getStoredTokens,
   clearTokens,
@@ -16,10 +16,12 @@ import {
   searchTracks,
   createPlaylist,
   addTracksToPlaylist,
+  uploadPlaylistCover,
   playPlaylist,
   getPlaylist,
   getUserPlaylists,
   removeTracksFromPlaylist,
+  getTopArtists,
   getPlaylistTracks as spotifyGetPlaylistTracks,
   playTrackInPlaylist as spotifyPlayTrackInPlaylist,
   saveTrack as spotifySaveTrack,
@@ -46,6 +48,8 @@ interface SpotifyContextValue {
   getUserPlaylists: () => Promise<any>;
   removeTracksFromPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
   addTracksToPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
+  topArtistImages: string[];
+  topArtists: TopArtist[];
   getPlaylistTracks: (playlistId: string) => Promise<SpotifyTrack[]>;
   playTrackInPlaylist: (playlistUri: string, trackUri: string) => Promise<void>;
   saveTrack: (trackId: string) => Promise<void>;
@@ -61,6 +65,8 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SpotifyUser | null>(null);
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [topArtistImages, setTopArtistImages] = useState<string[]>([]);
+  const [topArtists, setTopArtists] = useState<TopArtist[]>([]);
   const [isCurrentTrackSaved, setIsCurrentTrackSaved] = useState(false);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -99,6 +105,8 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     setTokens(null);
     setUser(null);
     setPlayback(null);
+    setTopArtistImages([]);
+    setTopArtists([]);
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
     }
@@ -268,6 +276,16 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
         const playbackData = await getCurrentPlayback(validTokens.accessToken);
         setPlayback(playbackData);
+
+        try {
+          const artists = await getTopArtists(validTokens.accessToken);
+          setTopArtists(artists);
+          setTopArtistImages(
+            artists.map((a) => a.images[0]?.url).filter(Boolean)
+          );
+        } catch (e) {
+          console.warn("Failed to fetch top artists:", e);
+        }
       } catch {
         clearTokens();
       } finally {
@@ -311,6 +329,8 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         getUserPlaylists: getUserPlaylistsData,
         removeTracksFromPlaylist: removeTracksFromPlaylistById,
         addTracksToPlaylist: addTracksToPlaylistById,
+        topArtistImages,
+        topArtists,
         getPlaylistTracks: getPlaylistTracksById,
         playTrackInPlaylist: playTrackInPlaylistById,
         saveTrack: saveTrackById,

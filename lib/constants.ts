@@ -11,6 +11,8 @@ export const SPOTIFY_SCOPES = [
 	"playlist-modify-private",
 	"playlist-modify-public",
 	"playlist-read-private",
+	"ugc-image-upload",
+	"user-top-read",
 	"user-library-read",
 	"user-library-modify",
 ].join(" ");
