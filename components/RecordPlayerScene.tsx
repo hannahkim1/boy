@@ -8,7 +8,8 @@ import {
 	useCallback,
 } from "react";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
-import { Text, Html } from "@react-three/drei";
+import { Text, Html, Environment } from "@react-three/drei";
+import { EffectComposer, Bloom, Vignette, N8AO } from "@react-three/postprocessing";
 import { BakedScene } from "./BakedScene";
 import * as THREE from "three";
 import type { SpotifyTrack } from "@/lib/types";
@@ -1698,35 +1699,36 @@ function Room() {
 function Lighting() {
 	return (
 		<>
-			<ambientLight intensity={0.5} color="#ffffff" />
-			{/* Main overhead light */}
-			<pointLight
-				position={[0, 1.2, 0.4]}
-				intensity={2}
-				color="#fff5e6"
-				distance={4}
+			{/* Warm fill — enough to read detail in shadowed areas of a dark room */}
+			<ambientLight intensity={0.22} color="#c8b89a" />
+
+			{/* Warm key — top front right */}
+			<spotLight
+				position={[8, 12, 10]}
+				angle={0.6}
+				penumbra={0.85}
+				intensity={60}
+				color="#ffb070"
 			/>
-			{/* Light on the right side for record player */}
+			{/* Cool rim — opposite side, defines silhouette */}
+			<spotLight
+				position={[-12, 10, -10]}
+				angle={0.7}
+				penumbra={0.9}
+				intensity={30}
+				color="#5fc8d6"
+			/>
+			{/* Subtle front fill */}
 			<pointLight
-				position={[0.4, 0.5, 0.3]}
-				intensity={1}
+				position={[0, 4, 12]}
+				intensity={4}
 				color="#ffffff"
-				distance={2.5}
+				distance={30}
+				decay={2}
 			/>
-			{/* Light specifically for the monitor area */}
-			<pointLight
-				position={[-0.5, 0.5, 0.4]}
-				intensity={1.2}
-				color="#e6f0ff"
-				distance={2}
-			/>
-			{/* Subtle fill light from front */}
-			<pointLight
-				position={[0, 0.3, 1]}
-				intensity={0.6}
-				color="#ffffff"
-				distance={2}
-			/>
+
+			{/* Low-intensity IBL for fill reflections on metals */}
+			<Environment preset="warehouse" environmentIntensity={0.18} />
 		</>
 	);
 }
@@ -2086,6 +2088,7 @@ export function RecordPlayerScene({
 				}}
 				onCreated={({ gl }) => {
 					gl.outputColorSpace = THREE.SRGBColorSpace;
+					gl.toneMappingExposure = 1.1;
 					gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 					const canvas = gl.domElement;
 					canvas.addEventListener("webglcontextlost", (e) => {
@@ -2098,7 +2101,7 @@ export function RecordPlayerScene({
 				}}
 			>
 				<WebGLCleanup />
-				<color attach="background" args={["#050505"]} />
+				<color attach="background" args={["#08080b"]} />
 				<Lighting />
 
 				{/* Blender scene — static environment, furniture, decorations */}
@@ -2136,6 +2139,25 @@ export function RecordPlayerScene({
 					monitorFocused={monitorFocused}
 					mousePosition={mousePosition}
 				/>
+
+				<EffectComposer>
+					<N8AO
+						aoRadius={3}
+						intensity={8}
+						distanceFalloff={1}
+						aoSamples={16}
+						denoiseSamples={4}
+						denoiseRadius={12}
+						screenSpaceRadius={false}
+					/>
+					<Bloom
+						luminanceThreshold={0.6}
+						luminanceSmoothing={0.9}
+						intensity={0.8}
+						mipmapBlur
+					/>
+					<Vignette eskil={false} offset={0.18} darkness={0.7} />
+				</EffectComposer>
 			</Canvas>
 
 			{/* Laptop screen UI overlay — appears when laptop is clicked */}
