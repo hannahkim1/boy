@@ -12,7 +12,7 @@ import { Text, Html, Environment } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette, N8AO } from "@react-three/postprocessing";
 import { BakedScene } from "./BakedScene";
 import * as THREE from "three";
-import type { SpotifyTrack } from "@/lib/types";
+import type { SpotifyTrack, TopArtist } from "@/lib/types";
 import { MonitorScreenContent, type PlaylistDetails } from "./MonitorScreen";
 
 // Component to handle WebGL context cleanup on unmount
@@ -1828,7 +1828,7 @@ function CameraController({
 		const isFocused = monitorFocused || focusedCover;
 
 		if (isAnimating.current) {
-			animationProgress.current += 0.03;
+			animationProgress.current += 0.02;
 			const t = Math.min(animationProgress.current, 1);
 			const eased = 1 - (1 - t) ** 3;
 
@@ -1958,6 +1958,81 @@ function VinylRecordNoTexture({ isPlaying }: { isPlaying: boolean }) {
 	);
 }
 
+function SpotifyCodeImage({ uri, artistId }: { uri: string; artistId: string }) {
+	const url = `https://scannables.scdn.co/uri/plain/png/000000/white/640/${uri}`;
+	const texture = useLoader(THREE.TextureLoader, url, undefined, () => {});
+	return (
+		<mesh
+			position={[0, -0.38, 0.05]}
+			onClick={(e) => {
+				e.stopPropagation();
+				window.open(`https://open.spotify.com/artist/${artistId}`, "_blank");
+			}}
+			onPointerOver={() => { document.body.style.cursor = "pointer"; }}
+			onPointerOut={() => { document.body.style.cursor = "auto"; }}
+		>
+			<planeGeometry args={[0.7, 0.175]} />
+			<meshBasicMaterial map={texture} transparent />
+		</mesh>
+	);
+}
+
+function ArtistInfoOverlay({
+	artist,
+	rank,
+	position,
+}: {
+	artist: TopArtist;
+	rank: number;
+	position: [number, number, number];
+}) {
+	const groupRef = useRef<THREE.Group>(null);
+	const progress = useRef(0);
+
+	useFrame((_, delta) => {
+		if (!groupRef.current) return;
+		progress.current = Math.min(progress.current + delta * 2.5, 1);
+		// Ease-out cubic
+		const t = 1 - (1 - progress.current) ** 3;
+		groupRef.current.position.y = position[1] - 0.06 * (1 - t);
+		// Fade via material opacity on the Text children
+		groupRef.current.traverse((child) => {
+			if ((child as THREE.Mesh).material) {
+				const mat = (child as THREE.Mesh).material as THREE.Material;
+				mat.transparent = true;
+				mat.opacity = t;
+			}
+		});
+	});
+
+	return (
+		<group ref={groupRef} position={[position[0], position[1] - 0.06, position[2]]}>
+			<Text
+				fontSize={0.12}
+				color="white"
+				anchorX="center"
+				anchorY="top"
+				maxWidth={1.2}
+			>
+				{artist.name}
+			</Text>
+			<Text
+				position={[0, -0.16, 0]}
+				fontSize={0.065}
+				color="#b3b3b3"
+				anchorX="center"
+				anchorY="top"
+				maxWidth={1}
+			>
+				{`#${rank} Most Listened`}
+			</Text>
+			<Suspense fallback={null}>
+				<SpotifyCodeImage uri={artist.uri} artistId={artist.id} />
+			</Suspense>
+		</group>
+	);
+}
+
 interface RecordPlayerSceneProps {
 	albumArt: string | null;
 	isPlaying: boolean;
@@ -1985,6 +2060,7 @@ interface RecordPlayerSceneProps {
 	receiverPlaylistDescription?: string | null;
 	isCurrentTrackInPlaylist?: boolean;
 	topArtistImages?: string[];
+	topArtists?: TopArtist[];
 }
 
 export function RecordPlayerScene({
@@ -2014,6 +2090,7 @@ export function RecordPlayerScene({
 	receiverPlaylistDescription,
 	isCurrentTrackInPlaylist,
 	topArtistImages,
+	topArtists,
 }: RecordPlayerSceneProps) {
 	const [contextLost, setContextLost] = useState(false);
 	const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(
@@ -2182,6 +2259,22 @@ export function RecordPlayerScene({
 					focusedCover={focusedCover}
 					coverPositions={coverPositionsRef}
 				/>
+
+				{/* Artist info overlay when a cover is focused */}
+				{focusedCover && topArtists && (() => {
+					const index = parseInt(focusedCover.replace("Cover_", ""), 10) - 1;
+					const artist = topArtists[index];
+					const coverPos = coverPositionsRef.current?.get(focusedCover);
+					if (!artist || !coverPos) return null;
+					return (
+						<ArtistInfoOverlay
+							key={focusedCover}
+							artist={artist}
+							rank={index + 1}
+							position={[coverPos.x, coverPos.y - 0.35, coverPos.z + 0.15]}
+						/>
+					);
+				})()}
 
 				<EffectComposer>
 					<N8AO

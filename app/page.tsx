@@ -13,7 +13,7 @@ import { exchangeCodeForTokens } from "@/lib/spotify";
 function HomeContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, login, logout } = useSpotifyAuth();
-  const { isPlaying, albumArt, trackName, artistName, progress, duration, track, topArtistImages } = usePlayback();
+  const { isPlaying, albumArt, trackName, artistName, progress, duration, track, topArtistImages, topArtists } = usePlayback();
   const { play, pause, skipNext, skipPrevious } = useSpotify();
   const { isSaved, toggleSave } = useSavedTrack(track?.id);
   const [isExchanging, setIsExchanging] = useState(false);
@@ -78,6 +78,7 @@ function HomeContent() {
         onLikeTrack={toggleSave}
         isLiked={isSaved}
         topArtistImages={topArtistImages}
+        topArtists={topArtists}
       />
 
       {/* Track info overlay — bottom centre */}

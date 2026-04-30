@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import type { StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack } from "@/lib/types";
+import type { StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack, TopArtist } from "@/lib/types";
 import {
   getStoredTokens,
   clearTokens,
@@ -49,6 +49,7 @@ interface SpotifyContextValue {
   removeTracksFromPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
   addTracksToPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
   topArtistImages: string[];
+  topArtists: TopArtist[];
   getPlaylistTracks: (playlistId: string) => Promise<SpotifyTrack[]>;
   playTrackInPlaylist: (playlistUri: string, trackUri: string) => Promise<void>;
   saveTrack: (trackId: string) => Promise<void>;
@@ -65,6 +66,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [topArtistImages, setTopArtistImages] = useState<string[]>([]);
+  const [topArtists, setTopArtists] = useState<TopArtist[]>([]);
   const [isCurrentTrackSaved, setIsCurrentTrackSaved] = useState(false);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -104,6 +106,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setPlayback(null);
     setTopArtistImages([]);
+    setTopArtists([]);
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
     }
@@ -276,6 +279,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
         try {
           const artists = await getTopArtists(validTokens.accessToken);
+          setTopArtists(artists);
           setTopArtistImages(
             artists.map((a) => a.images[0]?.url).filter(Boolean)
           );
@@ -326,6 +330,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         removeTracksFromPlaylist: removeTracksFromPlaylistById,
         addTracksToPlaylist: addTracksToPlaylistById,
         topArtistImages,
+        topArtists,
         getPlaylistTracks: getPlaylistTracksById,
         playTrackInPlaylist: playTrackInPlaylistById,
         saveTrack: saveTrackById,

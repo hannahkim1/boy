@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useSpotify } from "@/context/SpotifyContext";
-import type { SpotifyTrack } from "@/lib/types";
+import type { SpotifyTrack, TopArtist } from "@/lib/types";
 
 interface RecordPlayerSceneProps {
   albumArt: string | null;
@@ -25,6 +25,7 @@ interface RecordPlayerSceneProps {
   receiverPlaylistDescription?: string | null;
   isCurrentTrackInPlaylist?: boolean;
   topArtistImages?: string[];
+  topArtists?: TopArtist[];
 }
 
 const RecordPlayerSceneInner = dynamic(
