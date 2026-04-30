@@ -20,6 +20,13 @@ export interface SpotifyArtist {
   uri: string;
 }
 
+export interface TopArtist {
+  id: string;
+  name: string;
+  uri: string;
+  images: SpotifyImage[];
+}
+
 export interface SpotifyAlbum {
   id: string;
   name: string;

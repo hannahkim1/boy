@@ -16,10 +16,12 @@ import {
   searchTracks,
   createPlaylist,
   addTracksToPlaylist,
+  uploadPlaylistCover,
   playPlaylist,
   getPlaylist,
   getUserPlaylists,
   removeTracksFromPlaylist,
+  getTopArtists,
 } from "@/lib/spotify";
 
 interface SpotifyContextValue {
@@ -34,13 +36,14 @@ interface SpotifyContextValue {
   skipNext: () => Promise<void>;
   skipPrevious: () => Promise<void>;
   search: (query: string) => Promise<SpotifyTrack[]>;
-  createPlaylistWithTracks: (name: string, tracks: SpotifyTrack[], message?: string) => Promise<string>;
+  createPlaylistWithTracks: (name: string, tracks: SpotifyTrack[], message?: string, coverBase64?: string) => Promise<string>;
   getValidToken: () => Promise<string | null>;
   playPlaylistById: (playlistId: string) => Promise<void>;
   getPlaylistById: (playlistId: string) => Promise<any>;
   getUserPlaylists: () => Promise<any>;
   removeTracksFromPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
   addTracksToPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
+  topArtistImages: string[];
 }
 
 const SpotifyContext = createContext<SpotifyContextValue | null>(null);
@@ -50,6 +53,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SpotifyUser | null>(null);
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [topArtistImages, setTopArtistImages] = useState<string[]>([]);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const getValidToken = useCallback(async (): Promise<string | null> => {
@@ -87,6 +91,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     setTokens(null);
     setUser(null);
     setPlayback(null);
+    setTopArtistImages([]);
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
     }
@@ -127,7 +132,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   }, [getValidToken]);
 
   const createPlaylistWithTracks = useCallback(
-    async (name: string, tracks: SpotifyTrack[], message?: string) => {
+    async (name: string, tracks: SpotifyTrack[], message?: string, coverBase64?: string) => {
       const accessToken = await getValidToken();
       if (!accessToken || !user) throw new Error("Not authenticated");
 
@@ -136,6 +141,10 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       if (tracks.length > 0) {
         const trackUris = tracks.map((t) => t.uri);
         await addTracksToPlaylist(accessToken, playlistId, trackUris);
+      }
+
+      if (coverBase64) {
+        await uploadPlaylistCover(accessToken, playlistId, coverBase64);
       }
 
       return playlistId;
@@ -201,6 +210,15 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
         const playbackData = await getCurrentPlayback(validTokens.accessToken);
         setPlayback(playbackData);
+
+        try {
+          const artists = await getTopArtists(validTokens.accessToken);
+          setTopArtistImages(
+            artists.map((a) => a.images[0]?.url).filter(Boolean)
+          );
+        } catch (e) {
+          console.warn("Failed to fetch top artists:", e);
+        }
       } catch {
         clearTokens();
       } finally {
@@ -244,6 +262,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         getUserPlaylists: getUserPlaylistsData,
         removeTracksFromPlaylist: removeTracksFromPlaylistById,
         addTracksToPlaylist: addTracksToPlaylistById,
+        topArtistImages,
       }}
     >
       {children}

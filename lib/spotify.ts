@@ -6,7 +6,7 @@ import {
   TOKEN_STORAGE_KEY,
   CODE_VERIFIER_KEY,
 } from "./constants";
-import type { TokenResponse, StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack } from "./types";
+import type { TokenResponse, StoredTokens, SpotifyUser, PlaybackState, SpotifyTrack, TopArtist } from "./types";
 
 function generateRandomString(length: number): string {
   const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -163,6 +163,14 @@ async function fetchWithAuth<T>(endpoint: string, accessToken: string): Promise<
   return response.json();
 }
 
+export async function getTopArtists(accessToken: string): Promise<TopArtist[]> {
+  const data = await fetchWithAuth<{ items: TopArtist[] }>(
+    "/me/top/artists?limit=5&time_range=medium_term",
+    accessToken
+  );
+  return data?.items ?? [];
+}
+
 export async function getCurrentUser(accessToken: string): Promise<SpotifyUser> {
   const user = await fetchWithAuth<SpotifyUser>("/me", accessToken);
   if (!user) throw new Error("Failed to fetch user");
@@ -276,6 +284,34 @@ export async function addTracksToPlaylist(
     if (!response.ok) {
       throw new Error(`Failed to add tracks: ${response.status}`);
     }
+  }
+}
+
+export async function uploadPlaylistCover(
+  accessToken: string,
+  playlistId: string,
+  base64Jpeg: string
+): Promise<void> {
+  const response = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlistId}/images`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "image/jpeg",
+    },
+    body: base64Jpeg,
+  });
+
+  if (response.status !== 202) {
+    let errorMessage = `Failed to upload playlist cover: ${response.status}`;
+
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData?.error?.message ?? errorMessage;
+    } catch {
+      // Spotify sometimes returns an empty response body for failed writes.
+    }
+
+    throw new Error(errorMessage);
   }
 }
 
