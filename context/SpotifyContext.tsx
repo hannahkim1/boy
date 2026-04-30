@@ -22,6 +22,11 @@ import {
   getUserPlaylists,
   removeTracksFromPlaylist,
   getTopArtists,
+  getPlaylistTracks as spotifyGetPlaylistTracks,
+  playTrackInPlaylist as spotifyPlayTrackInPlaylist,
+  saveTrack as spotifySaveTrack,
+  removeTrack as spotifyRemoveTrack,
+  checkSavedTracks as spotifyCheckSavedTracks,
 } from "@/lib/spotify";
 
 interface SpotifyContextValue {
@@ -36,7 +41,7 @@ interface SpotifyContextValue {
   skipNext: () => Promise<void>;
   skipPrevious: () => Promise<void>;
   search: (query: string) => Promise<SpotifyTrack[]>;
-  createPlaylistWithTracks: (name: string, tracks: SpotifyTrack[], message?: string, coverBase64?: string) => Promise<string>;
+  createPlaylistWithTracks: (name: string, tracks: SpotifyTrack[], message?: string, isPublic?: boolean) => Promise<string>;
   getValidToken: () => Promise<string | null>;
   playPlaylistById: (playlistId: string) => Promise<void>;
   getPlaylistById: (playlistId: string) => Promise<any>;
@@ -44,6 +49,12 @@ interface SpotifyContextValue {
   removeTracksFromPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
   addTracksToPlaylist: (playlistId: string, trackUris: string[]) => Promise<void>;
   topArtistImages: string[];
+  getPlaylistTracks: (playlistId: string) => Promise<SpotifyTrack[]>;
+  playTrackInPlaylist: (playlistUri: string, trackUri: string) => Promise<void>;
+  saveTrack: (trackId: string) => Promise<void>;
+  removeSavedTrack: (trackId: string) => Promise<void>;
+  checkSavedTracks: (trackIds: string[]) => Promise<boolean[]>;
+  isCurrentTrackSaved: boolean;
 }
 
 const SpotifyContext = createContext<SpotifyContextValue | null>(null);
@@ -54,6 +65,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [topArtistImages, setTopArtistImages] = useState<string[]>([]);
+  const [isCurrentTrackSaved, setIsCurrentTrackSaved] = useState(false);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const getValidToken = useCallback(async (): Promise<string | null> => {
@@ -132,19 +144,15 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   }, [getValidToken]);
 
   const createPlaylistWithTracks = useCallback(
-    async (name: string, tracks: SpotifyTrack[], message?: string, coverBase64?: string) => {
+    async (name: string, tracks: SpotifyTrack[], message?: string, isPublic: boolean = true) => {
       const accessToken = await getValidToken();
       if (!accessToken || !user) throw new Error("Not authenticated");
 
-      const playlistId = await createPlaylist(accessToken, user.id, name, message);
+      const playlistId = await createPlaylist(accessToken, user.id, name, message, isPublic);
 
       if (tracks.length > 0) {
         const trackUris = tracks.map((t) => t.uri);
         await addTracksToPlaylist(accessToken, playlistId, trackUris);
-      }
-
-      if (coverBase64) {
-        await uploadPlaylistCover(accessToken, playlistId, coverBase64);
       }
 
       return playlistId;
@@ -189,6 +197,61 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     },
     [getValidToken]
   );
+
+  const getPlaylistTracksById = useCallback(async (playlistId: string) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    return spotifyGetPlaylistTracks(accessToken, playlistId);
+  }, [getValidToken]);
+
+  const playTrackInPlaylistById = useCallback(
+    async (playlistUri: string, trackUri: string) => {
+      const accessToken = await getValidToken();
+      if (!accessToken) throw new Error("Not authenticated");
+      await spotifyPlayTrackInPlaylist(accessToken, playlistUri, trackUri);
+      await refreshPlayback();
+    },
+    [getValidToken, refreshPlayback]
+  );
+
+  const saveTrackById = useCallback(async (trackId: string) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    await spotifySaveTrack(accessToken, trackId);
+    setIsCurrentTrackSaved(true);
+  }, [getValidToken]);
+
+  const removeSavedTrackById = useCallback(async (trackId: string) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    await spotifyRemoveTrack(accessToken, trackId);
+    setIsCurrentTrackSaved(false);
+  }, [getValidToken]);
+
+  const checkSavedTracksById = useCallback(async (trackIds: string[]) => {
+    const accessToken = await getValidToken();
+    if (!accessToken) throw new Error("Not authenticated");
+    return spotifyCheckSavedTracks(accessToken, trackIds);
+  }, [getValidToken]);
+
+  // Check if current track is saved when playback changes
+  useEffect(() => {
+    async function checkCurrentTrack() {
+      if (!playback?.item?.id) {
+        setIsCurrentTrackSaved(false);
+        return;
+      }
+      try {
+        const accessToken = await getValidToken();
+        if (!accessToken) return;
+        const [isSaved] = await spotifyCheckSavedTracks(accessToken, [playback.item.id]);
+        setIsCurrentTrackSaved(isSaved);
+      } catch {
+        // Silently fail
+      }
+    }
+    checkCurrentTrack();
+  }, [playback?.item?.id, getValidToken]);
 
   useEffect(() => {
     async function init() {
@@ -263,6 +326,12 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         removeTracksFromPlaylist: removeTracksFromPlaylistById,
         addTracksToPlaylist: addTracksToPlaylistById,
         topArtistImages,
+        getPlaylistTracks: getPlaylistTracksById,
+        playTrackInPlaylist: playTrackInPlaylistById,
+        saveTrack: saveTrackById,
+        removeSavedTrack: removeSavedTrackById,
+        checkSavedTracks: checkSavedTracksById,
+        isCurrentTrackSaved,
       }}
     >
       {children}

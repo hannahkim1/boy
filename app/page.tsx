@@ -3,16 +3,28 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/Button";
-import { RetroSceneClient } from "@/components/RetroSceneClient";
+import { RecordPlayerSceneClient } from "@/components/RecordPlayerSceneClient";
 import { useSpotifyAuth } from "@/hooks/useSpotifyAuth";
 import { usePlayback } from "@/hooks/usePlayback";
+import { useSavedTrack } from "@/hooks/useSavedTrack";
+import { useSpotify } from "@/context/SpotifyContext";
 import { exchangeCodeForTokens } from "@/lib/spotify";
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, login, logout } = useSpotifyAuth();
-  const { isPlaying, trackName, artistName, albumArt, topArtistImages } = usePlayback();
+  const { isPlaying, albumArt, trackName, artistName, progress, duration, track, topArtistImages } = usePlayback();
+  const { play, pause, skipNext, skipPrevious } = useSpotify();
+  const { isSaved, toggleSave } = useSavedTrack(track?.id);
   const [isExchanging, setIsExchanging] = useState(false);
+
+  const handlePlayPause = () => {
+    if (isPlaying) {
+      pause();
+    } else {
+      play();
+    }
+  };
 
   useEffect(() => {
     async function handleCallback() {
@@ -52,9 +64,21 @@ function HomeContent() {
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#0a0a0a]">
-      {/* 3D Blender scene — vinyl spins when isPlaying */}
-      <RetroSceneClient topArtistImages={topArtistImages} />
+    <div className="relative w-full h-screen overflow-hidden">
+      <RecordPlayerSceneClient
+        albumArt={albumArt}
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPause}
+        onSkipNext={skipNext}
+        onSkipPrevious={skipPrevious}
+        trackName={trackName}
+        artistName={artistName}
+        progress={progress}
+        duration={duration}
+        onLikeTrack={toggleSave}
+        isLiked={isSaved}
+        topArtistImages={topArtistImages}
+      />
 
       {/* Track info overlay — bottom centre */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 pointer-events-none">
@@ -94,11 +118,7 @@ function HomeContent() {
           </div>
         )}
 
-        <Button
-          variant="ghost"
-          onClick={logout}
-          className="text-sm bg-black/50 backdrop-blur-sm pointer-events-auto"
-        >
+        <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm">
           Disconnect
         </Button>
       </div>

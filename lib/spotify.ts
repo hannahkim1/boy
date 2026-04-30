@@ -239,7 +239,8 @@ export async function createPlaylist(
   accessToken: string,
   userId: string,
   name: string,
-  description?: string
+  description?: string,
+  isPublic: boolean = true
 ): Promise<string> {
   const response = await fetch(`${SPOTIFY_API_BASE}/users/${userId}/playlists`, {
     method: "POST",
@@ -250,7 +251,7 @@ export async function createPlaylist(
     body: JSON.stringify({
       name,
       description: description ?? "Created with Boy App",
-      public: false,
+      public: isPublic,
     }),
   });
 
@@ -321,22 +322,83 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   );
 }
 
+export interface SpotifyDevice {
+  id: string;
+  is_active: boolean;
+  is_private_session: boolean;
+  is_restricted: boolean;
+  name: string;
+  type: string;
+  volume_percent: number;
+}
+
+export async function getAvailableDevices(
+  accessToken: string
+): Promise<SpotifyDevice[]> {
+  const response = await fetch(`${SPOTIFY_API_BASE}/me/player/devices`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get devices: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.devices || [];
+}
+
+export async function transferPlayback(
+  accessToken: string,
+  deviceId: string,
+  play: boolean = false
+): Promise<void> {
+  const response = await fetch(`${SPOTIFY_API_BASE}/me/player`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      device_ids: [deviceId],
+      play,
+    }),
+  });
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to transfer playback: ${response.status}`);
+  }
+}
+
 export async function playPlaylist(
   accessToken: string,
   playlistUri: string,
   deviceId?: string
 ): Promise<void> {
+  // If no device specified, try to get an active device or first available
+  let targetDeviceId = deviceId;
+
+  if (!targetDeviceId) {
+    const devices = await getAvailableDevices(accessToken);
+    const activeDevice = devices.find(d => d.is_active);
+
+    if (activeDevice) {
+      targetDeviceId = activeDevice.id;
+    } else if (devices.length > 0) {
+      // No active device, transfer to first available
+      targetDeviceId = devices[0].id;
+      await transferPlayback(accessToken, targetDeviceId, false);
+      // Wait a moment for device to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } else {
+      throw new Error("No Spotify devices available. Please open Spotify on a device first.");
+    }
+  }
+
   const body: any = {
     context_uri: playlistUri,
   };
 
-  if (deviceId) {
-    body.device_id = deviceId;
-  }
-
-  const url = deviceId
-    ? `${SPOTIFY_API_BASE}/me/player/play?device_id=${deviceId}`
-    : `${SPOTIFY_API_BASE}/me/player/play`;
+  const url = `${SPOTIFY_API_BASE}/me/player/play?device_id=${targetDeviceId}`;
 
   const response = await fetch(url, {
     method: "PUT",
@@ -407,4 +469,123 @@ export async function removeTracksFromPlaylist(
   if (!response.ok) {
     throw new Error(`Failed to remove tracks: ${response.status}`);
   }
+}
+
+export async function playTrackInPlaylist(
+  accessToken: string,
+  playlistUri: string,
+  trackUri: string,
+  positionMs: number = 0
+): Promise<void> {
+  const devices = await getAvailableDevices(accessToken);
+  const activeDevice = devices.find(d => d.is_active);
+
+  let targetDeviceId: string;
+
+  if (activeDevice) {
+    targetDeviceId = activeDevice.id;
+  } else if (devices.length > 0) {
+    targetDeviceId = devices[0].id;
+    await transferPlayback(accessToken, targetDeviceId, false);
+    await new Promise(resolve => setTimeout(resolve, 500));
+  } else {
+    throw new Error("No Spotify devices available. Please open Spotify on a device first.");
+  }
+
+  const url = `${SPOTIFY_API_BASE}/me/player/play?device_id=${targetDeviceId}`;
+
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      context_uri: playlistUri,
+      offset: { uri: trackUri },
+      position_ms: positionMs,
+    }),
+  });
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to play track: ${response.status}`);
+  }
+}
+
+export async function getPlaylistTracks(
+  accessToken: string,
+  playlistId: string,
+  limit: number = 100
+): Promise<SpotifyTrack[]> {
+  const response = await fetch(
+    `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=${limit}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get playlist tracks: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.items?.map((item: { track: SpotifyTrack | null }) => item.track).filter(Boolean) ?? [];
+}
+
+export async function saveTrack(
+  accessToken: string,
+  trackId: string
+): Promise<void> {
+  const response = await fetch(
+    `${SPOTIFY_API_BASE}/me/tracks?ids=${trackId}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok && response.status !== 200) {
+    throw new Error(`Failed to save track: ${response.status}`);
+  }
+}
+
+export async function removeTrack(
+  accessToken: string,
+  trackId: string
+): Promise<void> {
+  const response = await fetch(
+    `${SPOTIFY_API_BASE}/me/tracks?ids=${trackId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok && response.status !== 200) {
+    throw new Error(`Failed to remove track: ${response.status}`);
+  }
+}
+
+export async function checkSavedTracks(
+  accessToken: string,
+  trackIds: string[]
+): Promise<boolean[]> {
+  const response = await fetch(
+    `${SPOTIFY_API_BASE}/me/tracks/contains?ids=${trackIds.join(",")}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to check saved tracks: ${response.status}`);
+  }
+
+  return response.json();
 }

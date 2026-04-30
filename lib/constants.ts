@@ -13,6 +13,8 @@ export const SPOTIFY_SCOPES = [
 	"playlist-read-private",
 	"ugc-image-upload",
 	"user-top-read",
+	"user-library-read",
+	"user-library-modify",
 ].join(" ");
 
 export const TOKEN_STORAGE_KEY = "spotify_tokens";
