@@ -1959,8 +1959,21 @@ function VinylRecordNoTexture({ isPlaying }: { isPlaying: boolean }) {
 }
 
 function SpotifyCodeImage({ uri, artistId }: { uri: string; artistId: string }) {
-	const url = `https://scannables.scdn.co/uri/plain/png/000000/white/640/${uri}`;
-	const texture = useLoader(THREE.TextureLoader, url, undefined, () => {});
+	const [texture, setTexture] = useState<THREE.Texture | null>(null);
+
+	useEffect(() => {
+		const loader = new THREE.TextureLoader();
+		loader.crossOrigin = "anonymous";
+		loader.load(
+			`https://scannables.scdn.co/uri/plain/png/000000/white/640/${uri}`,
+			(tex) => setTexture(tex),
+			undefined,
+			() => { /* silently fail if image can't load */ },
+		);
+	}, [uri]);
+
+	if (!texture) return null;
+
 	return (
 		<mesh
 			position={[0, -0.38, 0.05]}
@@ -2026,9 +2039,7 @@ function ArtistInfoOverlay({
 			>
 				{`#${rank} Most Listened`}
 			</Text>
-			<Suspense fallback={null}>
-				<SpotifyCodeImage uri={artist.uri} artistId={artist.id} />
-			</Suspense>
+			<SpotifyCodeImage uri={artist.uri} artistId={artist.id} />
 		</group>
 	);
 }
