@@ -1491,9 +1491,21 @@ function PostItNote({ description, isFocused, onClick, onClose }: PostItNoteProp
 	const noteWidth = isFocused ? 0.22 : 0.08;
 	const noteHeight = isFocused ? 0.22 : 0.08;
 
-	// Resting position on desk
-	const restPosition = new THREE.Vector3(0.55, 0.006, 0.08);
-	const restRotation = new THREE.Euler(-Math.PI / 2 + 0.05, -0.3, 0.02);
+	// Cached objects to avoid per-frame allocations
+	const restPosition = useRef(new THREE.Vector3(0.55, 0.006, 0.08)).current;
+	const restRotation = useRef(new THREE.Euler(-Math.PI / 2 + 0.05, -0.3, 0.02)).current;
+	const cameraDirection = useRef(new THREE.Vector3()).current;
+	const targetPos = useRef(new THREE.Vector3()).current;
+
+	// Assign onBeforeRender once via effect, not every frame
+	useEffect(() => {
+		if (!meshRef.current) return;
+		if (isFocused) {
+			meshRef.current.onBeforeRender = () => { gl.clearDepth(); };
+		} else {
+			meshRef.current.onBeforeRender = () => {};
+		}
+	}, [isFocused, gl]);
 
 	// Animate the note position and rotation
 	useFrame(() => {
@@ -1501,9 +1513,8 @@ function PostItNote({ description, isFocused, onClick, onClose }: PostItNoteProp
 
 		if (isFocused) {
 			// Calculate position in front of camera
-			const cameraDirection = new THREE.Vector3();
 			camera.getWorldDirection(cameraDirection);
-			const targetPos = camera.position.clone().add(cameraDirection.multiplyScalar(0.4));
+			targetPos.copy(camera.position).addScaledVector(cameraDirection, 0.4);
 			targetPos.y = camera.position.y - 0.05; // Slightly below eye level
 
 			// Face the camera directly
@@ -1517,15 +1528,6 @@ function PostItNote({ description, isFocused, onClick, onClose }: PostItNoteProp
 			groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, restRotation.x, 0.1);
 			groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, restRotation.y, 0.1);
 			groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, restRotation.z, 0.1);
-		}
-
-		// When focused, clear depth buffer so note renders on top
-		if (isFocused && meshRef.current) {
-			meshRef.current.onBeforeRender = () => {
-				gl.clearDepth();
-			};
-		} else if (meshRef.current) {
-			meshRef.current.onBeforeRender = () => {};
 		}
 	});
 
@@ -1736,7 +1738,9 @@ function Lighting() {
 // Camera controller that follows mouse movement
 interface CameraControllerProps {
 	monitorFocused: boolean;
-	mousePosition: { x: number; y: number };
+	mousePositionRef: React.RefObject<{ x: number; y: number }>;
+	focusedCover: string | null;
+	coverPositions: React.RefObject<Map<string, THREE.Vector3>>;
 }
 
 // Default camera matches the Blender scene camera (exported via glTF Y-up conversion)
@@ -1752,16 +1756,25 @@ const MOUSE_LOOK_X = 0.6;
 const MOUSE_LOOK_Y = 0.3;
 const MOUSE_LERP_SPEED = 0.008;
 
+// Distance from cover to place camera when zoomed in
+const COVER_ZOOM_DISTANCE = 5;
+
 function CameraController({
 	monitorFocused,
-	mousePosition,
+	mousePositionRef,
+	focusedCover,
+	coverPositions,
 }: CameraControllerProps) {
 	const { camera } = useThree();
 	const isAnimating = useRef(false);
 	const animationProgress = useRef(0);
 	const currentPosition = useRef(new THREE.Vector3().copy(CAMERA_DEFAULT));
 	const currentTarget = useRef(new THREE.Vector3().copy(TARGET_DEFAULT));
-	const wasMonitorFocused = useRef(false);
+	const prevFocusState = useRef<string | null>(null); // tracks "monitor" | cover name | null
+	const animFromPosition = useRef(new THREE.Vector3().copy(CAMERA_DEFAULT));
+	const animFromTarget = useRef(new THREE.Vector3().copy(TARGET_DEFAULT));
+	const animToPosition = useRef(new THREE.Vector3().copy(CAMERA_DEFAULT));
+	const animToTarget = useRef(new THREE.Vector3().copy(TARGET_DEFAULT));
 	const initialized = useRef(false);
 
 	// Initialize camera position and orientation on mount
@@ -1771,73 +1784,79 @@ function CameraController({
 		initialized.current = true;
 	}, [camera]);
 
+	// Determine the current focus state and trigger animation when it changes
 	useEffect(() => {
-		if (monitorFocused !== wasMonitorFocused.current) {
-			isAnimating.current = true;
-			animationProgress.current = 0;
-			wasMonitorFocused.current = monitorFocused;
+		const currentFocus = monitorFocused
+			? "monitor"
+			: focusedCover;
+
+		if (currentFocus === prevFocusState.current) return;
+
+		// Snapshot current camera state as animation start
+		animFromPosition.current.copy(currentPosition.current);
+		animFromTarget.current.copy(currentTarget.current);
+
+		// Determine animation destination
+		if (currentFocus === "monitor") {
+			animToPosition.current.copy(CAMERA_MONITOR);
+			animToTarget.current.copy(TARGET_MONITOR);
+		} else if (currentFocus && coverPositions.current) {
+			const coverPos = coverPositions.current.get(currentFocus);
+			if (coverPos) {
+				// Move camera straight toward the cover from default position
+				const direction = new THREE.Vector3()
+					.subVectors(CAMERA_DEFAULT, coverPos)
+					.normalize();
+				animToTarget.current.copy(coverPos);
+				animToPosition.current
+					.copy(coverPos)
+					.addScaledVector(direction, COVER_ZOOM_DISTANCE);
+			}
+		} else {
+			animToPosition.current.copy(CAMERA_DEFAULT);
+			animToTarget.current.copy(TARGET_DEFAULT);
 		}
-	}, [monitorFocused]);
+
+		isAnimating.current = true;
+		animationProgress.current = 0;
+		prevFocusState.current = currentFocus;
+	}, [monitorFocused, focusedCover, coverPositions]);
 
 	useFrame(() => {
 		if (!initialized.current) return;
 
-		if (monitorFocused) {
-			// Animate to monitor focus position
-			if (isAnimating.current) {
-				animationProgress.current += 0.03;
-				const t = Math.min(animationProgress.current, 1);
-				const eased = 1 - (1 - t) ** 3;
+		const isFocused = monitorFocused || focusedCover;
 
-				currentPosition.current.lerpVectors(
-					CAMERA_DEFAULT,
-					CAMERA_MONITOR,
-					eased,
-				);
-				currentTarget.current.lerpVectors(
-					TARGET_DEFAULT,
-					TARGET_MONITOR,
-					eased,
-				);
+		if (isAnimating.current) {
+			animationProgress.current += 0.03;
+			const t = Math.min(animationProgress.current, 1);
+			const eased = 1 - (1 - t) ** 3;
 
-				if (t >= 1) {
-					isAnimating.current = false;
-				}
+			currentPosition.current.lerpVectors(
+				animFromPosition.current,
+				animToPosition.current,
+				eased,
+			);
+			currentTarget.current.lerpVectors(
+				animFromTarget.current,
+				animToTarget.current,
+				eased,
+			);
+
+			if (t >= 1) {
+				isAnimating.current = false;
 			}
 
 			camera.position.copy(currentPosition.current);
 			camera.lookAt(currentTarget.current);
-		} else {
-			// Animate back from monitor if needed
-			if (isAnimating.current) {
-				animationProgress.current += 0.03;
-				const t = Math.min(animationProgress.current, 1);
-				const eased = 1 - (1 - t) ** 3;
+		} else if (!isFocused) {
+			// Default idle: mouse-follow look
+			currentPosition.current.copy(CAMERA_DEFAULT);
 
-				currentPosition.current.lerpVectors(
-					CAMERA_MONITOR,
-					CAMERA_DEFAULT,
-					eased,
-				);
-				currentTarget.current.lerpVectors(
-					TARGET_MONITOR,
-					TARGET_DEFAULT,
-					eased,
-				);
+			const mp = mousePositionRef.current;
+			const targetLookX = TARGET_DEFAULT.x + mp.x * MOUSE_LOOK_X;
+			const targetLookZ = TARGET_DEFAULT.z - mp.y * MOUSE_LOOK_Y;
 
-				if (t >= 1) {
-					isAnimating.current = false;
-				}
-			} else {
-				// Reset position to default when not animating
-				currentPosition.current.copy(CAMERA_DEFAULT);
-			}
-
-			// Calculate where on the desk the cursor is pointing
-			const targetLookX = TARGET_DEFAULT.x + mousePosition.x * MOUSE_LOOK_X;
-			const targetLookZ = TARGET_DEFAULT.z - mousePosition.y * MOUSE_LOOK_Y;
-
-			// Smoothly interpolate the look-at target
 			currentTarget.current.x = THREE.MathUtils.lerp(
 				currentTarget.current.x,
 				targetLookX,
@@ -1850,6 +1869,10 @@ function CameraController({
 			);
 			currentTarget.current.y = TARGET_DEFAULT.y;
 
+			camera.position.copy(currentPosition.current);
+			camera.lookAt(currentTarget.current);
+		} else {
+			// Focused and not animating — hold position
 			camera.position.copy(currentPosition.current);
 			camera.lookAt(currentTarget.current);
 		}
@@ -2001,16 +2024,16 @@ export function RecordPlayerScene({
 	const [currentPlaylistName, setCurrentPlaylistName] = useState<string | null>(
 		null,
 	);
-	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+	const mousePositionRef = useRef({ x: 0, y: 0 });
 	const [postItFocused, setPostItFocused] = useState(false);
+	const [focusedCover, setFocusedCover] = useState<string | null>(null);
+	const coverPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map());
 
-	// Track mouse position for camera movement
+	// Track mouse position for camera movement (ref to avoid re-renders)
 	useEffect(() => {
 		const handleMouseMove = (e: MouseEvent) => {
-			// Normalize mouse position to -1 to 1 range
-			const x = (e.clientX / window.innerWidth) * 2 - 1;
-			const y = -((e.clientY / window.innerHeight) * 2 - 1); // Invert Y
-			setMousePosition({ x, y });
+			mousePositionRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
+			mousePositionRef.current.y = -((e.clientY / window.innerHeight) * 2 - 1);
 		};
 
 		window.addEventListener("mousemove", handleMouseMove);
@@ -2046,6 +2069,11 @@ export function RecordPlayerScene({
 					handleMonitorClose();
 					return;
 				}
+				if (focusedCover) {
+					e.preventDefault();
+					setFocusedCover(null);
+					return;
+				}
 				if (postItFocused) {
 					e.preventDefault();
 					setPostItFocused(false);
@@ -2059,7 +2087,7 @@ export function RecordPlayerScene({
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [handlePlayPause, monitorFocused, postItFocused, handleMonitorClose]);
+	}, [handlePlayPause, monitorFocused, focusedCover, postItFocused, handleMonitorClose]);
 
 	if (contextLost) {
 		return (
@@ -2116,13 +2144,23 @@ export function RecordPlayerScene({
 							"Vinyl_Record",
 							"Spindle",
 							"Record_Label",
+							"Cover_1",
+							"Cover_2",
+							"Cover_3",
+							"Cover_4",
+							"Cover_5",
 						]}
 						onMeshClick={(name) => {
 							if (name === "Laptop_Screen") {
 								handleMonitorClick();
+							} else if (/^Cover_\d+$/.test(name)) {
+								setFocusedCover((prev) => (prev === name ? null : name));
 							} else {
 								handlePlayPause();
 							}
+						}}
+						onCoverPositions={(positions) => {
+							coverPositionsRef.current = positions;
 						}}
 					/>
 				</Suspense>
@@ -2140,17 +2178,19 @@ export function RecordPlayerScene({
 
 				<CameraController
 					monitorFocused={monitorFocused}
-					mousePosition={mousePosition}
+					mousePositionRef={mousePositionRef}
+					focusedCover={focusedCover}
+					coverPositions={coverPositionsRef}
 				/>
 
 				<EffectComposer>
 					<N8AO
-						aoRadius={3}
-						intensity={8}
+						aoRadius={2}
+						intensity={6}
 						distanceFalloff={1}
-						aoSamples={16}
+						aoSamples={8}
 						denoiseSamples={4}
-						denoiseRadius={12}
+						denoiseRadius={8}
 						screenSpaceRadius={false}
 					/>
 					<Bloom
