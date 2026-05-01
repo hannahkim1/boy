@@ -119,7 +119,7 @@ function HomeContent() {
           </div>
         )}
 
-        <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm">
+        <Button variant="ghost" onClick={logout} className="text-sm bg-black/50 backdrop-blur-sm pointer-events-auto">
           Disconnect
         </Button>
       </div>

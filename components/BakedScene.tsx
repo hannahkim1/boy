@@ -149,8 +149,9 @@ export function BakedScene({
 						const newMat = originalMat.clone();
 						newMat.map = texture;
 						newMat.color.set(0xffffff);
-						newMat.emissive.set(0x000000);
-						newMat.emissiveIntensity = 0;
+						newMat.emissive.set(0xffffff);
+						newMat.emissiveMap = texture;
+						newMat.emissiveIntensity = 0.4;
 						newMat.metalness = 0;
 						newMat.roughness = 1;
 						newMat.needsUpdate = true;
