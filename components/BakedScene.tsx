@@ -18,21 +18,35 @@ const GLOW_PREFIXES: Record<string, { color: string; intensity: number }> = {
 
 interface BakedSceneProps {
 	interactiveMeshes?: string[];
+	draggableMeshes?: string[];
 	onMeshClick?: (name: string) => void;
 	onMeshHover?: (name: string | null) => void;
+	onMeshPointerDown?: (name: string, object: THREE.Object3D) => void;
+	onMeshPointerUp?: () => void;
+	isDragging?: React.RefObject<boolean>;
 	topArtistImages?: string[];
 	onCoverPositions?: (positions: Map<string, THREE.Vector3>) => void;
+	sceneRef?: React.MutableRefObject<THREE.Object3D | null>;
 }
 
 export function BakedScene({
 	interactiveMeshes,
+	draggableMeshes,
 	onMeshClick,
 	onMeshHover,
+	onMeshPointerDown,
+	onMeshPointerUp,
+	isDragging,
 	topArtistImages,
 	onCoverPositions,
+	sceneRef,
 }: BakedSceneProps = {}) {
 	const { scene } = useGLTF(MODEL_PATH);
 	const cloned = useMemo(() => scene.clone(true), [scene]);
+
+	useEffect(() => {
+		if (sceneRef) sceneRef.current = cloned;
+	}, [cloned, sceneRef]);
 
 	useEffect(() => {
 		const meshNames: string[] = [];
@@ -202,21 +216,47 @@ export function BakedScene({
 	const isInteractive = (name: string) =>
 		!interactiveMeshes || interactiveMeshes.includes(name);
 
+	// Walk up from a mesh to find the nearest ancestor whose name is in draggableMeshes
+	const findDraggableAncestor = (obj: THREE.Object3D): THREE.Object3D | null => {
+		if (!draggableMeshes) return null;
+		let current: THREE.Object3D | null = obj;
+		while (current) {
+			if (draggableMeshes.includes(current.name)) return current;
+			current = current.parent;
+		}
+		return null;
+	};
+
 	return (
 		<primitive
 			object={cloned}
 			onClick={(e: ThreeEvent<MouseEvent>) => {
+				// Suppress click that fires after a drag
+				if (isDragging?.current) return;
 				const name = e.object.name;
-				if (!isInteractive(name)) return;
+				if (!isInteractive(name) && !findDraggableAncestor(e.object)) return;
 				e.stopPropagation();
 				onMeshClick?.(name);
 			}}
+			onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+				const group = findDraggableAncestor(e.object);
+				if (!group) return;
+				e.stopPropagation();
+				onMeshPointerDown?.(group.name, group);
+			}}
+			onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+				const group = findDraggableAncestor(e.object);
+				if (!group) return;
+				e.stopPropagation();
+				onMeshPointerUp?.();
+			}}
 			onPointerOver={(e: ThreeEvent<PointerEvent>) => {
 				const name = e.object.name;
-				if (!isInteractive(name)) return;
+				const draggable = findDraggableAncestor(e.object);
+				if (!isInteractive(name) && !draggable) return;
 				e.stopPropagation();
 				onMeshHover?.(name);
-				document.body.style.cursor = "pointer";
+				document.body.style.cursor = draggable ? "grab" : "pointer";
 			}}
 			onPointerOut={() => {
 				onMeshHover?.(null);

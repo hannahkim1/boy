@@ -6,11 +6,13 @@ import {
 	useState,
 	useEffect,
 	useCallback,
+	useMemo,
 } from "react";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { Text, Html, Environment } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette, N8AO } from "@react-three/postprocessing";
 import { BakedScene } from "./BakedScene";
+import { useDragAndDrop } from "@/hooks/useDragAndDrop";
 import * as THREE from "three";
 import type { SpotifyTrack, TopArtist } from "@/lib/types";
 import { MonitorScreenContent, type PlaylistDetails } from "./MonitorScreen";
@@ -1735,12 +1737,49 @@ function Lighting() {
 	);
 }
 
+// Invalidates the frame loop on demand so the scene re-renders only when needed
+function SceneInvalidator({
+	isPlaying,
+	isDragging,
+	monitorFocused,
+	focusedCover,
+}: {
+	isPlaying: boolean;
+	isDragging: React.RefObject<boolean>;
+	monitorFocused: boolean;
+	focusedCover: string | null;
+}) {
+	const { invalidate } = useThree();
+
+	// Always invalidate when playing (vinyl spins), dragging, or anything is focused
+	useFrame(() => {
+		if (isPlaying || isDragging.current || monitorFocused || focusedCover) {
+			invalidate();
+		}
+	});
+
+	// Invalidate on mouse move for camera follow
+	useEffect(() => {
+		const onMove = () => invalidate();
+		window.addEventListener("pointermove", onMove);
+		return () => window.removeEventListener("pointermove", onMove);
+	}, [invalidate]);
+
+	// Invalidate on any state change
+	useEffect(() => {
+		invalidate();
+	}, [isPlaying, monitorFocused, focusedCover, invalidate]);
+
+	return null;
+}
+
 // Camera controller that follows mouse movement
 interface CameraControllerProps {
 	monitorFocused: boolean;
 	mousePositionRef: React.RefObject<{ x: number; y: number }>;
 	focusedCover: string | null;
 	coverPositions: React.RefObject<Map<string, THREE.Vector3>>;
+	isDragging?: React.RefObject<boolean>;
 }
 
 // Default camera matches the Blender scene camera (exported via glTF Y-up conversion)
@@ -1764,6 +1803,7 @@ function CameraController({
 	mousePositionRef,
 	focusedCover,
 	coverPositions,
+	isDragging,
 }: CameraControllerProps) {
 	const { camera } = useThree();
 	const isAnimating = useRef(false);
@@ -1850,9 +1890,10 @@ function CameraController({
 			camera.position.copy(currentPosition.current);
 			camera.lookAt(currentTarget.current);
 		} else if (!isFocused) {
-			// Default idle: mouse-follow look
+			// Default idle: mouse-follow look (dampen when dragging)
 			currentPosition.current.copy(CAMERA_DEFAULT);
 
+			const lerpSpeed = isDragging?.current ? MOUSE_LERP_SPEED * 0.1 : MOUSE_LERP_SPEED;
 			const mp = mousePositionRef.current;
 			const targetLookX = TARGET_DEFAULT.x + mp.x * MOUSE_LOOK_X;
 			const targetLookZ = TARGET_DEFAULT.z - mp.y * MOUSE_LOOK_Y;
@@ -1860,12 +1901,12 @@ function CameraController({
 			currentTarget.current.x = THREE.MathUtils.lerp(
 				currentTarget.current.x,
 				targetLookX,
-				MOUSE_LERP_SPEED,
+				lerpSpeed,
 			);
 			currentTarget.current.z = THREE.MathUtils.lerp(
 				currentTarget.current.z,
 				targetLookZ,
-				MOUSE_LERP_SPEED,
+				lerpSpeed,
 			);
 			currentTarget.current.y = TARGET_DEFAULT.y;
 
@@ -2074,6 +2115,65 @@ interface RecordPlayerSceneProps {
 	topArtists?: TopArtist[];
 }
 
+const DRAGGABLE_GROUPS = [
+	"Book_1_Group", "Book_2_Group", "Book_3_Group",
+	"Book_4_Group", "Book_5_Group",
+	"CD_Disc",
+];
+
+const SOLID_SURFACES = [
+	{ name: "Crate_Group", container: true },
+	{ name: "Laptop_Group", boundingChild: "Laptop_KbdArea" },
+	{ name: "LaptopStand_Group" },
+	{ name: "RecordPlayer_Group" },
+	{ name: "Speaker_Group", surfaceInset: 0.09, boundingChild: "Speaker_Cabinet" },
+	{ name: "Speaker_Group.007", surfaceInset: 0.09, boundingChild: "Speaker_Cabinet.001" },
+];
+
+interface DraggableBakedSceneProps {
+	topArtistImages?: string[];
+	interactiveMeshes: string[];
+	onMeshClick: (name: string) => void;
+	onCoverPositions: (positions: Map<string, THREE.Vector3>) => void;
+	isDraggingRef: React.MutableRefObject<boolean>;
+}
+
+function DraggableBakedScene({
+	topArtistImages,
+	interactiveMeshes,
+	onMeshClick,
+	onCoverPositions,
+	isDraggingRef,
+}: DraggableBakedSceneProps) {
+	const sceneRef = useRef<THREE.Object3D | null>(null);
+	const SNAP_TARGETS = useMemo(() => [
+		{ draggableName: "CD_Disc", targetName: "DVD_TrayPad", snapRadius: 3.5, yOffset: 0.05, snapRotation: [0.2, 0, 0] as [number, number, number] },
+	], []);
+	const { onMeshPointerDown, onMeshPointerUp, isDragging, draggingName } =
+		useDragAndDrop(DRAGGABLE_GROUPS, sceneRef, SOLID_SURFACES, SNAP_TARGETS);
+
+	// Sync isDragging to parent ref so CameraController can read it
+	useFrame(() => {
+		isDraggingRef.current = isDragging.current;
+	});
+
+	return (
+		<>
+		<BakedScene
+			topArtistImages={topArtistImages}
+			interactiveMeshes={interactiveMeshes}
+			draggableMeshes={DRAGGABLE_GROUPS}
+			onMeshClick={onMeshClick}
+			onMeshPointerDown={onMeshPointerDown}
+			onMeshPointerUp={onMeshPointerUp}
+			isDragging={isDragging}
+			onCoverPositions={onCoverPositions}
+			sceneRef={sceneRef}
+		/>
+		</>
+	);
+}
+
 export function RecordPlayerScene({
 	albumArt,
 	isPlaying,
@@ -2116,6 +2216,7 @@ export function RecordPlayerScene({
 	const [postItFocused, setPostItFocused] = useState(false);
 	const [focusedCover, setFocusedCover] = useState<string | null>(null);
 	const coverPositionsRef = useRef<Map<string, THREE.Vector3>>(new Map());
+	const isDraggingRef = useRef(false);
 
 	// Track mouse position for camera movement (ref to avoid re-renders)
 	useEffect(() => {
@@ -2197,11 +2298,12 @@ export function RecordPlayerScene({
 		<div className="w-full h-screen relative">
 			<Canvas
 				shadows={false}
+				frameloop="demand"
 				camera={{ position: [0.535, 7.161, 18.605], fov: 40 }}
 				gl={{
 					antialias: true,
 					toneMapping: THREE.ACESFilmicToneMapping,
-					powerPreference: "default",
+					powerPreference: "low-power",
 					failIfMajorPerformanceCaveat: false,
 				}}
 				onCreated={({ gl }) => {
@@ -2219,12 +2321,18 @@ export function RecordPlayerScene({
 				}}
 			>
 				<WebGLCleanup />
+				<SceneInvalidator
+					isPlaying={displayPlaying}
+					isDragging={isDraggingRef}
+					monitorFocused={monitorFocused}
+					focusedCover={focusedCover}
+				/>
 				<color attach="background" args={["#08080b"]} />
 				<Lighting />
 
 				{/* Blender scene — static environment, furniture, decorations */}
 				<Suspense fallback={null}>
-					<BakedScene
+					<DraggableBakedScene
 						topArtistImages={topArtistImages}
 						interactiveMeshes={[
 							"Laptop_Screen",
@@ -2237,19 +2345,21 @@ export function RecordPlayerScene({
 							"Cover_3",
 							"Cover_4",
 							"Cover_5",
+							...DRAGGABLE_GROUPS,
 						]}
 						onMeshClick={(name) => {
 							if (name === "Laptop_Screen") {
 								handleMonitorClick();
 							} else if (/^Cover_\d+$/.test(name)) {
 								setFocusedCover((prev) => (prev === name ? null : name));
-							} else {
+							} else if (!DRAGGABLE_GROUPS.includes(name)) {
 								handlePlayPause();
 							}
 						}}
 						onCoverPositions={(positions) => {
 							coverPositionsRef.current = positions;
 						}}
+						isDraggingRef={isDraggingRef}
 					/>
 				</Suspense>
 
@@ -2269,6 +2379,7 @@ export function RecordPlayerScene({
 					mousePositionRef={mousePositionRef}
 					focusedCover={focusedCover}
 					coverPositions={coverPositionsRef}
+					isDragging={isDraggingRef}
 				/>
 
 				{/* Artist info overlay when a cover is focused */}
